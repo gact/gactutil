@@ -1,31 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''GACTutil package FASTA utilities.'''
-
-
-
+'''GACTutil FASTA module.'''
 
 def recode_fasta(infile, outfile, mapping):
-    '''Rename FASTA sequences.
+    '''Recode FASTA data.
     
     Args:
-        infile (str): input FASTA file
-        outfile (str): output FASTA file
-        mapping (list): mapping of old item names to new names
-    
-    Returns:
-        None
+        infile (str): Input FASTA file.
+        outfile (str): Output FASTA file.
+        mapping (dict): Mapping of old item names to new names.
     '''
-    print('reaching recode_fasta OK')
-    print(infile)
-    print(outfile)
-    print(mapping)
+    pass
 
-# rename header by default
-# --id to rename IDs only
-
-# >ref|NC_001133| [org=Saccharomyces cerevisiae] [strain=S288C] [moltype=genomic] [chromosome=I]
-# >gi|290878045|emb|FN393060.2| Saccharomyces cerevisiae EC1118 chromosome II, EC1118_1B15 genomic scaffold, whole genome shotgun sequence
-
-# [top=circular]
-
+################################################################################
