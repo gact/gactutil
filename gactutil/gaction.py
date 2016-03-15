@@ -154,6 +154,9 @@ def _dict_from_string(dict_string):
     if not isinstance(dict_string, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(dict_string))
     
+    if not ( dict_string.startswith('{') and dict_string.endswith('}') ):
+        dict_string = '{' + dict_string + '}'
+    
     try:
         result = safe_load(dict_string)
         assert isinstance(result, dict)
@@ -194,6 +197,9 @@ def _list_from_string(list_string):
     
     if not isinstance(list_string, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(list_string))
+    
+    if not ( list_string.startswith('[') and list_string.endswith(']') ):
+        list_string = '[' + list_string + ']'
     
     try:
         result = safe_load(list_string)
