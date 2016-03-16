@@ -570,22 +570,31 @@ def _prep_argparser():
                     if param_info['group'] == 'positional':
                     
                         apq.add_argument(param_name, 
-                            help=param_info['description'])
+                            help = param_info['description'])
                             
                     elif param_info['group'] == 'optional':
                     
                         apq.add_argument(param_info['flag'], 
-                            dest=param_name, 
-                            default=param_info['default'], 
-                            required=param_info['required'], 
-                            help=param_info['description'])
-                            
+                            dest     = param_name, 
+                            metavar  = param_info['type'].__name__.upper(),
+                            default  = param_info['default'], 
+                            required = param_info['required'], 
+                            help     = param_info['description'])
+                    
+                    elif param_info['group'] == 'short':
+                        
+                        apq.add_argument(param_info['flag'], 
+                            dest     = param_name, 
+                            default  = param_info['default'], 
+                            required = param_info['required'], 
+                            help     = param_info['description'])
+                        
                     elif param_info['group'] == 'switch':
                     
                         apq.add_argument(param_info['flag'], 
-                            dest=param_name, 
-                            action='store_true', 
-                            help=param_info['description'])
+                            dest   = param_name, 
+                            action = 'store_true', 
+                            help   = param_info['description'])
                             
                     elif param_info['group'] == 'collection':
                         
@@ -593,21 +602,26 @@ def _prep_argparser():
                         title = '{} argument'.format( param_name.replace('_', '-') )
                         file_param_name = '{}_file'.format(param_name)
                         file_flag = '{}-file'.format(param_info['flag'])
-                        item_help = 'set {} from string'.format(param_info['type'].__name__)
-                        file_help = 'load {} from file'.format(param_info['type'].__name__)
+                        item_help = 'Set {} from string.'.format(
+                            param_info['type'].__name__)
+                        file_help = 'Load {} from file.'.format(
+                            param_info['type'].__name__)
                         
                         # Add (mutually exclusive) pair of alternative parameters.
-                        ag = apq.add_argument_group(title=title, 
-                            description=param_info['description'])
+                        ag = apq.add_argument_group(
+                            title       = title, 
+                            description = param_info['description'])
                         mxg = ag.add_mutually_exclusive_group(
-                            required=param_info['required'])
+                            required    = param_info['required'])
                         mxg.add_argument(param_info['flag'], 
-                            dest=param_name, 
-                            default=param_info['default'], 
-                            help=item_help)
+                            dest        = param_name, 
+                            metavar     = 'STR',
+                            default     = param_info['default'], 
+                            help        = item_help)
                         mxg.add_argument(file_flag, 
-                            dest=file_param_name, 
-                            help=file_help)
+                            dest        = file_param_name, 
+                            metavar     = 'PATH',
+                            help        = file_help)
             
             # Set function for this commmand.
             apq.set_defaults(function=function)
@@ -887,10 +901,12 @@ def _setup_commands():
                         # Short form parameters are treated as optionals.
                         # If parameter was positional, set as required.
                         if param_info['group'] == 'positional':
-                            param_info['group'] = 'optional'
                             param_info['required'] = True
                             param_info['default'] = None
-                            
+                    
+                        # Mark as short form optional.
+                        param_info['group'] = 'short'
+                    
                     # ..otherwise if parameter is of a collection type, create
                     # two (mutually exclusive) parameters: one to accept argument
                     # as a string, the other to load it from a file..
