@@ -1,0 +1,11 @@
+
+# Python compilation/build files.
+*.py[cod]
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Package data generated during setup.
+gactutil/data/
+
