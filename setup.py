@@ -45,8 +45,6 @@ setup_info = {
             'gaction = gactutil.gaction:main',
         ],
         'vcf.filters': [
-            'indel-only = gactutil.vcf:IndelOnly',
-            'mixed-only = gactutil.vcf:MixedOnly',
             'mnp-only = gactutil.vcf:MnpOnly',
             'sv-only = gactutil.vcf:SvOnly'
         ]
