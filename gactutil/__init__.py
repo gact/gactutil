@@ -8,6 +8,10 @@ from gzip import GzipFile
 import inspect
 import io
 import os
+from os.path import expanduser
+from os.path import expandvars
+from os.path import realpath
+from os.path import relpath
 from pkg_resources import resource_filename
 from platform import system
 from shutil import rmtree
@@ -70,10 +74,6 @@ def _read_settings():
         config_info = dict()
     return(config_info)
 
-def _resolve_path(path):
-    """Resolve absolute path."""
-    return os.path.abspath( os.path.expanduser(path) )
-
 def _setup_about(setup_info):
     """Setup info about package.
     
@@ -97,7 +97,7 @@ def _setup_about(setup_info):
     # Set config directory path for this platform.
     platform_system = system()
     if platform_system in ('Linux', 'Darwin'):
-        home = os.path.expanduser('~')
+        home = expanduser('~')
         if platform_system == 'Linux':
             about_info['config_dir'] = os.path.join(home, '.config', 'gactutil')
         elif platform_system == 'Darwin':
@@ -214,6 +214,47 @@ def prise(filepath, mode='r'):
     
     return fh
 
+def resolve_path(path, start=None):
+    """Resolve the specified path.
+    
+    By default, the specified path is modified by expanding the home directory 
+    and any environment variables, resolving symbolic links, and returning the 
+    resulting absolute path. If a `start` path is specified, the resolved path 
+    is given relative to `start`.
+    
+    Args:
+        path (str): A system path.
+        start (str): Optional starting point for the resolved path.
+    
+    Returns:
+        str: Resolved system path.
+    """
+    resolved_path = realpath( expandvars( expanduser(path) ) )
+    if start is not None:
+        start = realpath( expandvars( expanduser(start) ) )
+        resolved_path = relpath(resolved_path, start)
+    return resolved_path
+
+def resolve_paths(paths, start=None):
+    """Resolve the specified paths.
+    
+    By default, the specified paths are modified by expanding the home directory 
+    and any environment variables, resolving symbolic links, and returning the 
+    resulting absolute path for each input path. If a `start` path is specified, 
+    the resolved paths are given relative to `start`.
+    
+    Args:
+        paths (list): System paths.
+        start (str): Optional starting point for the resolved paths.
+    
+    Returns:
+        dict: Mapping of input paths to their resolved form.
+    """
+    resolved_paths = dict()
+    for path in paths:
+        resolved_paths[path] = resolve_path(path, start=start)
+    return resolved_paths
+
 @contextmanager
 def TemporaryDirectory(suffix='', prefix='tmp', name=None, dir=None, 
     delete=True):
@@ -233,8 +274,8 @@ def TemporaryDirectory(suffix='', prefix='tmp', name=None, dir=None,
         if dir is not None:
             os.path.join(dir, twd)
         
-        # Get canonical path of temp directory.
-        twd = os.path.realpath(twd)
+        # Resolve path of temp directory.
+        twd = resolve_path(twd)
         
         # Ensure temp directory exists.
         if not os.path.exists(twd):
