@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''GACTutil VCF module.
+"""GACTutil VCF module.
 
 This module contains functions and utilities for handling data in VCF format.
 
 The VCF filter command function is a wrapper for the PyVCF filter script, and 
 the filter classes defined within this module are intended for use with that script.
-'''
+"""
 
 from __future__ import absolute_import
 from argparse import ArgumentError
@@ -19,26 +19,26 @@ import vcf
 ################################################################################
 
 class CategoricalFilter(vcf.filters.Base):
-    '''Base class for categorical variant filters.'''
+    """Base class for categorical variant filters."""
     
     name = 'CategoricalFilter'
     
     def __init__(self, *args):
-        '''Create filter without arguments.'''
+        """Create filter without arguments."""
         if self.__class__.__name__ == 'CategoricalFilter':
             raise NotImplementedError("CategoricalFilter is an abstract class")
     
     def filter_name(self):
-        '''Return variant-type filter name.'''
+        """Return variant-type filter name."""
         return self.name
 
 class MnpOnly(CategoricalFilter):
-    '''Filter class for MNP variants.'''
+    """Filter class for MNP variants."""
     
     name = 'mnp-only'
     
     def __call__(self, record):
-        '''Pass if MNP variant, 'FAIL' otherwise.'''
+        """Pass if MNP variant, 'FAIL' otherwise."""
         
         ref_allele  = record.REF
         alt_alleles = [ str(x) for x in record.ALT ]
@@ -64,12 +64,12 @@ class MnpOnly(CategoricalFilter):
         return None
 
 class SvOnly(CategoricalFilter):
-    '''Filter class for structural variants.'''
+    """Filter class for structural variants."""
 
     name = 'sv-only'
 
     def __call__(self, record):
-        '''Pass if structural variant, 'FAIL' otherwise.'''
+        """Pass if structural variant, 'FAIL' otherwise."""
         
         if record.is_monomorphic:
             return 'FAIL'
@@ -83,7 +83,7 @@ class SvOnly(CategoricalFilter):
 
 def filter_vcf(infile, outfile, filters, no_short_circuit=False, 
     no_filtered=False):
-    '''Filter VCF.
+    """Filter VCF.
     
     Args:
         infile (str): Input VCF file.
@@ -91,7 +91,7 @@ def filter_vcf(infile, outfile, filters, no_short_circuit=False,
         filters (list): Filter specifications.
         no_short_circuit (bool): Apply all filters to each site.
         no_filtered (bool): Output only sites passing all filters.
-    '''
+    """
     
     # Get core options of PyVCF filter script.
     known_core_options = ('--output', '--no-short-circuit', '--no-filtered')

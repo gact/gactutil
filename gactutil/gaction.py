@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''GACTutil command-line interface.'''
+"""GACTutil command-line interface."""
 
 from argparse import ArgumentError
 from argparse import ArgumentParser
@@ -101,7 +101,7 @@ _info = {
 ################################################################################
 
 def _bool_from_string(s):
-    '''Get bool from string.'''
+    """Get bool from string."""
     if not isinstance(s, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(s))
     if s == 'True':
@@ -113,7 +113,7 @@ def _bool_from_string(s):
     return value
 
 def _coerce_from_string(s, return_type):
-    '''Coerce string to specified type.'''
+    """Coerce string to specified type."""
     if return_type is None:
         s = _None_from_string(s)
     elif return_type == bool:
@@ -134,7 +134,7 @@ def _coerce_from_string(s, return_type):
     return s
 
 def _dict_from_file(dict_file):
-    '''Get dictionary from file.'''
+    """Get dictionary from file."""
     
     if not isinstance(dict_file, basestring):
         raise TypeError("dictionary filepath is not of type string ~ {!r}".format(dict_file))
@@ -149,7 +149,7 @@ def _dict_from_file(dict_file):
     return result
 
 def _dict_from_string(dict_string):
-    '''Get dictionary from string.'''
+    """Get dictionary from string."""
     
     if not isinstance(dict_string, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(dict_string))
@@ -166,7 +166,7 @@ def _dict_from_string(dict_string):
     return result
 
 def _list_from_file(list_file):
-    '''Get list of scalars from file.'''
+    """Get list of scalars from file."""
     
     if not isinstance(list_file, basestring):
         raise TypeError("list filepath is not of type string ~ {!r}".format(list_file))
@@ -193,7 +193,7 @@ def _list_from_file(list_file):
     return result
 
 def _list_from_string(list_string):
-    '''Get list of scalars from string.'''
+    """Get list of scalars from string."""
     
     if not isinstance(list_string, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(list_string))
@@ -215,7 +215,7 @@ def _list_from_string(list_string):
     return result
 
 def _None_from_string(s):
-    '''Get None from string.'''
+    """Get None from string."""
     if not isinstance(s, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(s))
     if s != 'None':
@@ -223,7 +223,7 @@ def _None_from_string(s):
     return None
 
 def _parse_cmdfunc_docstring(function):
-    '''Parse command-function docstring.
+    """Parse command-function docstring.
     
     This function parses a command function docstring and returns an ordered 
     dictionary mapping headers to documentation. Command-function docstrings 
@@ -231,7 +231,7 @@ def _parse_cmdfunc_docstring(function):
     correspond to the docstring headers (e.g. 'Args'), in addition to two 
     special headers: 'Summary', which will contain the docstring summary line;
     and 'Description', which will contain the docstring description, if present.
-    '''
+    """
     
     # Get function name.
     func_name = function.__name__
@@ -482,7 +482,7 @@ def _parse_cmdfunc_docstring(function):
     return doc_info
 
 def _parse_cmdfunc_name(function):
-    '''Parse command-function name.'''
+    """Parse command-function name."""
     
     # Get function name.
     func_name = function.__name__
@@ -503,7 +503,7 @@ def _parse_cmdfunc_name(function):
     return command, qualifier
 
 def _prep_argparser():
-    '''Prep command-line argument parser.'''
+    """Prep command-line argument parser."""
     
     # Validate caller.
     caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
@@ -629,7 +629,7 @@ def _prep_argparser():
     return ap
 
 def _proc_args(args):
-    '''Process parsed command-line arguments.'''
+    """Process parsed command-line arguments."""
     
     # Validate caller.
     caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
@@ -711,12 +711,12 @@ def _proc_args(args):
     return function, args
 
 def _setup_commands():
-    '''Setup package commands.
+    """Setup package commands.
     
     Outputs a package data file in YAML format with command function information.
     
     NB: this function should only be called during package setup.
-    '''
+    """
     
     # Validate caller.
     caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
@@ -987,7 +987,7 @@ def _setup_commands():
 ################################################################################
 
 def gaction(argv=None):
-    '''Run gaction command.'''
+    """Run gaction command."""
 
     if argv is None:
         argv = sys.argv[1:]

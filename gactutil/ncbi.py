@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''GACTutil NCBI utilities.'''
+"""GACTutil NCBI utilities."""
 
 from socket import error as SocketError
 from time import sleep
@@ -24,7 +24,7 @@ _info = {
 ################################################################################
 
 def check_efetch(**kwargs):
-    '''Wrapper function for Entrez efetch.'''
+    """Wrapper function for Entrez efetch."""
     
     result = None
         
@@ -69,7 +69,7 @@ def check_efetch(**kwargs):
     return result
 
 def check_esearch(**kwargs):
-    '''Wrapper function for Entrez esearch.'''
+    """Wrapper function for Entrez esearch."""
     
     result = None
     

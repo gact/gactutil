@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''GACTutil genome module.'''
+"""GACTutil genome module."""
 
 from collections import deque
 from collections import OrderedDict
@@ -95,10 +95,10 @@ _info = {
 ################################################################################
 
 class GenomeIndex(object):
-    '''Genome index class.
+    """Genome index class.
     
     Handles reading, writing, and updating a genome index YAML file.
-    '''
+    """
 
     # Filename patterns of known genome data files.
     pattern = {
@@ -180,25 +180,25 @@ class GenomeIndex(object):
     
     @classmethod
     def _get_index_path(cls, path):
-        '''Get path of genome index from genome directory path.'''
+        """Get path of genome index from genome directory path."""
         return os.path.join( os.path.normpath(path), GenomeIndex.filename )
         
     @property
     def files(self):
-        '''dict: Dictionary of genome file info.'''
+        """dict: Dictionary of genome file info."""
         return self._data['files']
     
     @property
     def info(self):
-        '''dict: Dictionary of genome info.'''
+        """dict: Dictionary of genome info."""
         return self._data['info']
         
     def __init__(self, path):
-        '''Init genome index.
+        """Init genome index.
         
         Args:
             path (str): Path of genome directory.
-        '''
+        """
         
         # Get path of index file.
         index_path = GenomeIndex._get_index_path(path)
@@ -217,12 +217,12 @@ class GenomeIndex(object):
             self.load(path)
         
     def dump(self, path):
-        '''Dump genome index to genome directory.
+        """Dump genome index to genome directory.
         
         Args:
             path (str): Path of genome directory to which genome index 
                 will be dumped.
-        '''
+        """
         
         index_path = GenomeIndex._get_index_path(path)
         
@@ -233,12 +233,12 @@ class GenomeIndex(object):
             raise RuntimeError("failed to dump genome index to directory ~ {!r}".format(path))
     
     def load(self, path):
-        '''Load genome index from genome directory.
+        """Load genome index from genome directory.
         
         Args:
             path (str): Path of genome directory from which genome index 
                 will be loaded.
-        '''
+        """
         
         index_path = GenomeIndex._get_index_path(path)
         
@@ -253,12 +253,12 @@ class GenomeIndex(object):
             raise RuntimeError("failed to load invalid genome index from directory ~ {!r}".format(path))
 
     def update(self, path):
-        '''Update genome index for given genome directory.
+        """Update genome index for given genome directory.
         
         Args:
             path (str): Path of genome directory for which this genome index 
                 will be updated.
-        '''
+        """
         
         # Init index data.
         self._data = { 'info': dict(), 'files': dict() }
@@ -336,7 +336,7 @@ class GenomeIndex(object):
 ################################################################################
 
 def _norm_chr(chromosome):
-    '''Normalise chromosome name. (Returns None on failure.)'''
+    """Normalise chromosome name. (Returns None on failure.)"""
     
     # This pattern is modelled on the method used by SnpEff to simplify 
     # chromosome names, as in the file 'ChromosomeSimpleName.java'. Prefixes of
@@ -380,7 +380,7 @@ def _norm_chr(chromosome):
     return result
 
 def _load_genome_readme(filepath):
-    '''Load SGD genome README file.'''
+    """Load SGD genome README file."""
     
     with open(filepath, 'r') as fh:
         
@@ -415,7 +415,7 @@ def _load_genome_readme(filepath):
 ################################################################################
 
 def index_genome(path):
-    '''Index yeast genome data.
+    """Index yeast genome data.
     
     This takes as input a directory containing genome assembly files downloaded 
     from the Saccharomyces Genome Database (SGD). It indexes the data files in 
@@ -423,12 +423,12 @@ def index_genome(path):
     
     Args:
         path (str): Path to yeast genome data directory.
-    '''
+    """
     gindex = GenomeIndex(path)
     gindex.dump(path)
 
 def prep_genome(path, email=None):
-    '''Prep yeast genome data.
+    """Prep yeast genome data.
     
     This takes as input a directory containing genome assembly files downloaded 
     from the Saccharomyces Genome Database (SGD). It processes the SGD data 
@@ -463,7 +463,7 @@ def prep_genome(path, email=None):
     Args:
         path (str): Path to yeast genome data directory.
         email (str): Contact email for NCBI E-utilities.
-    '''
+    """
     
     # PROCESS ... ##############################################################
     

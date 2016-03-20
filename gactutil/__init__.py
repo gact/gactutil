@@ -34,7 +34,7 @@ _info = {
 ################################################################################
 
 def _read_about():
-    '''Read information about this package.'''
+    """Read information about this package."""
     about_file = os.path.join('data', 'about.yaml')
     about_path = resource_filename('gactutil', about_file)
     with open(about_path, 'r') as fh:
@@ -42,7 +42,7 @@ def _read_about():
     return about_info
 
 def _read_command_info():
-    '''Read package command info.'''
+    """Read package command info."""
     cmd_file = os.path.join('data', 'gaction.yaml')
     cmd_path = resource_filename('gactutil', cmd_file)
     with open(cmd_path, 'r') as fh:
@@ -50,12 +50,12 @@ def _read_command_info():
     return cmd_info
 
 def _read_setting(key):
-    '''Read a single package setting.'''
+    """Read a single package setting."""
     info = _read_settings()
     return info[key]
 
 def _read_settings():
-    '''Read package settings file.'''
+    """Read package settings file."""
     about = _read_about()
     settings_file = _info['settings-file']
     settings_path = os.path.join(about['config_dir'], settings_file)
@@ -71,16 +71,16 @@ def _read_settings():
     return(config_info)
 
 def _resolve_path(path):
-    '''Resolve absolute path.'''
+    """Resolve absolute path."""
     return os.path.abspath( os.path.expanduser(path) )
 
 def _setup_about(setup_info):
-    '''Setup info about package.
+    """Setup info about package.
     
     Outputs a package data file in YAML format with information about package.
     
     NB: this function should only be called during package setup.
-    '''
+    """
     
     # Validate caller.
     caller_file, caller_func = [ (inspect.stack()[1])[i] for i in (1, 3) ]
@@ -122,7 +122,7 @@ def _setup_about(setup_info):
         dump(about_info, fh, default_flow_style=False)
 
 def _truncate_string(s, length=16):
-    '''Truncate a string to the given length.'''
+    """Truncate a string to the given length."""
     
     if not isinstance(s, basestring):
         raise TypeError("truncation object must be of type string")
@@ -134,7 +134,7 @@ def _truncate_string(s, length=16):
     return s if len(s) <= length else '{}...'.format(s[:(length-3)])
 
 def _validate_mapping(mapping):
-    '''Validate a mapping object.'''
+    """Validate a mapping object."""
     for k in mapping:
         
         if not isinstance(k, _info['mapping-types']):
@@ -149,13 +149,13 @@ def _validate_mapping(mapping):
             raise TypeError("mapping value {!r} has invalid type ~ {!r}".format(str(x), type(x).__name__))
 
 def _write_setting(key, value):
-    '''Write a single package setting.'''
+    """Write a single package setting."""
     info = _read_settings_file()
     info[key] = value    
     _write_settings_file(info, path)
 
 def _write_settings(config_info):
-    '''Write package settings file.'''
+    """Write package settings file."""
     about = _read_about()
     settings_file = _info['settings-file']
     settings_path = os.path.join(about['config_dir'], settings_file)
@@ -168,7 +168,7 @@ def _write_settings(config_info):
 ################################################################################
 
 def prise(filepath, mode='r'):
-    '''Open a (possibly compressed) text file.'''
+    """Open a (possibly compressed) text file."""
     
     text_modes = ('r', 'w', 'a', 'rU')
     gzip_modes = ('r', 'w', 'a', 'rb', 'wb', 'ab')
@@ -176,13 +176,13 @@ def prise(filepath, mode='r'):
     valid_modes = [ m for i, m in enumerate(modes) 
         if m not in modes[:i] ]
     gzip_magic = '1f8b' 
-        
+    
     if mode not in valid_modes:
         raise ValueError("invalid file mode ~ {!r}".format(mode))
     
     # Assume no GZIP compression/decompression.
     gzipping = False
-                    
+    
     if mode.startswith('r'):
         
         with io.open(filepath, 'rb') as fh:
@@ -217,7 +217,7 @@ def prise(filepath, mode='r'):
 @contextmanager
 def TemporaryDirectory(suffix='', prefix='tmp', name=None, dir=None, 
     delete=True):
-    '''Create temporary directory.'''
+    """Create temporary directory."""
     
     # If a temp directory name was specified, ensure it exists..
     if name is not None:
