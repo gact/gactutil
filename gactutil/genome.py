@@ -20,7 +20,7 @@ from yaml import safe_load
 from yaml import YAMLError
 
 from gactutil.ncbi import check_efetch
-from gactutil import prise
+from gactutil import TextReader
 from gactutil import TemporaryDirectory
 
 ################################################################################
@@ -502,7 +502,7 @@ def prep_genome(path, email=None):
     anno_path = os.path.join(path, gindex.files['annotation'])
     
     # Read GFF pragmas and comments.
-    with prise(anno_path, 'r') as fh:
+    with TextReader(anno_path) as fh:
         
         pragmas, comments = [ list() for _ in range(2) ]
         
@@ -530,7 +530,7 @@ def prep_genome(path, email=None):
         header_comments = '\n'.join(comments)
     
     # Read and modify GFF records.
-    with prise(anno_path, 'r') as fh:
+    with TextReader(anno_path) as fh:
         
         try:
             records = [ x for x in GFF.parse(fh) ]

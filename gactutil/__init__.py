@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """GACTutil module."""
 
+from abc import ABCMeta
 from binascii import hexlify
 from contextlib import contextmanager
 from gzip import GzipFile
@@ -15,8 +16,10 @@ from os.path import relpath
 from pkg_resources import resource_filename
 from platform import system
 from shutil import rmtree
-import sys
+from sys import stdin
+from sys import stdout
 from tempfile import mkdtemp
+from tempfile import NamedTemporaryFile
 
 from yaml import dump
 from yaml import load
@@ -34,6 +37,251 @@ _info = {
     # Config settings filename.
     'settings-file': 'settings.yaml'
 }
+
+################################################################################
+
+class TextRW(object):  
+    """Abstract text reader/writer base class."""
+    __metaclass__ = ABCMeta
+    
+    @property
+    def closed(self):
+        """bool: True if file is closed; False otherwise."""
+        try:
+            return self._handle.closed
+        except AttributeError:
+            return None
+    
+    @property
+    def name(self):
+        """str: Name of specified file or standard file object."""
+        return self._name
+
+    @property
+    def newlines(self):
+        """str or tuple: Observed newlines."""
+        try:
+            return self._handle.newlines
+        except AttributeError:
+            return None
+    
+    def __init__(self):
+        """Init text reader/writer."""
+        self._closable = False
+        self._handle = None
+        self._name = None
+    
+    def __enter__(self):
+        """TextRW: Get reader/writer on entry to a context block."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Close reader/writer on exit from a context block."""
+        self.close()
+        
+    def close(self):
+        """Close reader/writer."""
+        if self._closable:
+            self._handle.close()
+
+class TextReader(TextRW):
+    """Text reader class."""
+    
+    def __init__(self, filepath=None):
+        """Init text reader.
+        
+         If an input `filepath` is specified, this is opened for reading. 
+         Otherwise, the new object will read from standard input. Input
+         that is GZIP-compressed is identified and extracted to a 
+         temporary file before reading.
+        
+        Args:
+            filepath (str): Path of input file.
+        """
+        
+        super(TextReader, self).__init__()
+        
+        # If filepath specified, resolve, validate, and open filepath..
+        if filepath is not None:
+            
+            self._closable = True
+            
+            filepath = resolve_path(filepath)
+            self._name = relpath(filepath)
+            
+            if not os.path.exists(filepath):
+                raise IOError("file not found ~ {!r}".format(self._name))
+            elif not os.path.isfile(filepath):
+                raise IOError("not a file ~ {!r}".format(self._name))
+            
+            self._handle = io.open(filepath, mode='rb')
+        
+        # ..otherwise open standard input for reading.
+        else:
+            
+            self._name = stdin.name
+            self._handle = io.open(stdin.fileno(), mode='rb')
+        
+        # Assume input is text.
+        format = 'text'
+        
+        # Sample first three bytes.
+        sample = self._handle.read(3)
+        
+        # If sample returned successfully, check if
+        # it indicates content is GZIP-compressed.
+        if len(sample) == 3:
+            magic_number = hexlify(sample[:2])
+            method = ord(sample[2:])
+            if magic_number == '1f8b': # NB: magic number for GZIP content.
+                if method != 8:
+                    raise ValueError("input compressed with unknown GZIP method")
+                format = 'gzip'
+        
+        # If input is GZIP-compressed, extract and then read decompressed text..
+        if format == 'gzip':
+            
+            gzipfile, textfile = [None] * 2
+            
+            try:
+                # Write GZIP temp file from input stream.
+                with NamedTemporaryFile(mode='wb', delete=False) as gtemp:
+                    
+                    # Get path of GZIP temp file.
+                    gzipfile = gtemp.name
+                    
+                    # Init data from sample.
+                    data = sample
+                    
+                    # While data in input stream, write data to GZIP temp file.
+                    while data:
+                        gtemp.write(data)
+                        data = self._handle.read(1048576)
+                
+                # Extract GZIP temp file to text temp file.
+                with NamedTemporaryFile(mode='w', delete=False) as ftemp:
+                    textfile = ftemp.name
+                    with GzipFile(gzipfile) as gtemp:
+                        for line in gtemp:
+                            ftemp.write(line)
+            
+            except (EOFError, IOError, OSError, ValueError) as e:
+                _remove_tempfile(textfile)
+                raise e
+            finally:
+                _remove_tempfile(gzipfile)
+            
+            # Keep temp file path.
+            self._temp = textfile
+            
+            # Set handle from text temp file.
+            self._handle = io.open(textfile)
+                        
+            # Keep empty sample; sampled bytes already passed to GZIP temp file.
+            self._sample = list()
+        
+        # ..otherwise read input as text.
+        else:
+            
+            # Keep null temp path; not used for text file input.
+            self._temp = None
+            
+            # Set text handle from input stream.
+            self._handle = io.TextIOWrapper(self._handle)
+            
+            # Extend sample until the next line separator, 
+            # so sample contains a set of complete lines.
+            try:
+                sample += next(self._handle)
+            except StopIteration: # NB: for very short input.
+                pass
+            
+            # Keep sample for initial reads.
+            self._sample = sample.splitlines(True)
+    
+    def __iter__(self):
+        """Get iterator for reader."""
+        return iter(self.__next__, None)
+    
+    def __next__(self):
+        """Get next line from reader."""
+        # If sample not expended, read next line from sample..
+        if len(self._sample) > 0:
+            return self._sample.pop(0)
+        # ..otherwise read next line from input handle.
+        else:
+            return next(self._handle)
+    
+    def close(self):
+        """Close reader."""
+        super(TextReader, self).close()
+        _remove_tempfile(self._temp)
+    
+    def next(self):
+        """Get next line from reader."""
+        return self.__next__()
+    
+    def read(self):
+        """Read file contents."""
+        return ''.join( self.readlines() )
+    
+    def readline(self):
+        """Read next line from reader."""
+        try:
+            return self.__next__()
+        except StopIteration:
+            return ''
+    
+    def readlines(self):
+        """Read lines from reader."""
+        for line in self:
+            yield line
+
+class TextWriter(TextRW):
+    """Text writer class."""
+    
+    def __init__(self, filepath=None, compress_output=False):
+        """Init text writer.
+         
+         If an output `filepath` is specified, this is opened for writing. 
+         Otherwise, the new object will write to standard output. Output 
+         is GZIP-compressed if `compress_output` is true, or if a `filepath` 
+         is specified that ends with the GZIP extension `.gz`.
+        
+        Args:
+            filepath (str): Path of output file.
+            compress_output (bool): Compress output.
+        """
+        
+        super(TextWriter, self).__init__()
+        
+        if filepath is not None:
+            
+            self._closable = True
+            
+            filepath = resolve_path(filepath)
+            self._name = relpath(filepath)
+            
+            if filepath.endswith('.gz'):
+                 compress_output = True
+            
+            self._handle = io.open(filepath, mode='w')
+            
+        else:
+        
+            self._name = stdout.name
+            self._handle = stdout
+        
+        if compress_output:
+            self._handle = GzipFile(fileobj=self._handle)
+    
+    def write(self, str):
+        """Write string."""
+        self._handle.write(str)
+    
+    def writelines(self, sequence):
+        """Write lines."""
+        self._handle.writelines(sequence)
 
 ################################################################################
 
@@ -73,6 +321,19 @@ def _read_settings():
     else:
         config_info = dict()
     return(config_info)
+
+def _remove_tempfile(filepath):
+    """Remove the specified temporary file."""
+    
+    if filepath is not None:
+        try:
+            if os.path.isfile(filepath):
+                os.remove(filepath)
+        except OSError:
+            warn("failed to remove temp file ~ {!r}".format(filepath), RuntimeWarning)
+        except TypeError:
+            raise TypeError("failed to remove temp file of type {} ~ {!r}".format(
+                type(filepath).__name__, filepath))
 
 def _setup_about(setup_info):
     """Setup info about package.
@@ -166,53 +427,6 @@ def _write_settings(config_info):
         raise RuntimeError("failed to write package settings file ~ {!r}".format(settings_file))
 
 ################################################################################
-
-def prise(filepath, mode='r'):
-    """Open a (possibly compressed) text file."""
-    
-    text_modes = ('r', 'w', 'a', 'rU')
-    gzip_modes = ('r', 'w', 'a', 'rb', 'wb', 'ab')
-    modes = text_modes + gzip_modes
-    valid_modes = [ m for i, m in enumerate(modes) 
-        if m not in modes[:i] ]
-    gzip_magic = '1f8b' 
-    
-    if mode not in valid_modes:
-        raise ValueError("invalid file mode ~ {!r}".format(mode))
-    
-    # Assume no GZIP compression/decompression.
-    gzipping = False
-    
-    if mode.startswith('r'):
-        
-        with io.open(filepath, 'rb') as fh:
-            sample = fh.peek()
-
-        magic = hexlify(sample[:2])
-        method = ord(sample[2:3])
-        
-        if magic == gzip_magic:
-            if method == 8:
-                gzipping = True
-            else:
-                raise ValueError("input compressed with unknown GZIP method")
-            
-    elif filepath.endswith('.gz'):
-        gzipping = True
-    
-    if gzipping:
-
-        if mode not in gzip_modes:
-            raise ValueError("file mode {!r} should not be used for GZIP-compressed content".format(mode))
-        fh = GzipFile(filepath, mode=mode)
-
-    else:
-
-        if mode not in text_modes:
-            raise ValueError("file mode {!r} should not be used for plain text".format(mode))
-        fh = open(filepath, mode=mode)
-    
-    return fh
 
 def resolve_path(path, start=None):
     """Resolve the specified path.
