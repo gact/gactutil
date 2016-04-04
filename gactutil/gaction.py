@@ -55,7 +55,7 @@ _info = {
      # filepath on the command-line, and the process of reading the object from 
      # that file should be handled within the function '_proc_args'.
     'collections': (dict, list),
-     
+    
     # Alias parameters: mappings of Python function parameters to command-line 
     # flags. These make it possible for common parameters to take a short form 
     # on the command line. If a command function uses an alias parameter, this 
@@ -352,9 +352,9 @@ def _parse_cmdfunc_docstring(function):
                             param_name, type_name, param_desc = m.groups()
                             type_value = locate(type_name)
                             
-                            # Check parameter does not denote variable arguments.
+                            # Check parameter does not denote unenumerated arguments.
                             if param_name.startswith('*'):
-                                raise RuntimeError("{} docstring must not specify variable arguments".format(
+                                raise RuntimeError("{} docstring must not specify unenumerated arguments".format(
                                     func_name))
                             
                             # Check parameter type specified.
@@ -773,9 +773,9 @@ def _setup_commands():
             # Get function parameter spec.
             param_spec = getargspec(function)
             
-            # Check that there are no variable arguments or keyword arguments.
+            # Check that there are no unenumerated arguments.
             if param_spec.varargs is not None or param_spec.keywords is not None:
-                raise ValueError("GACTutil command function {!r} cannot have variable arguments".format(func_info['name']))
+                raise ValueError("{} cannot have unenumerated arguments".format(func_info['name']))
             
             # Get specified parameter names.
             spec_params = param_spec.args
@@ -997,7 +997,7 @@ def gaction(argv=None):
     args = ap.parse_args(argv)
     
     function, args = _proc_args(args)
-        
+    
     function( **vars(args) )
 
 def main():
