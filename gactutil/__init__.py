@@ -87,13 +87,13 @@ class TextRW(object):
 class TextReader(TextRW):
     """Text reader class."""
     
-    def __init__(self, filepath=None):
+    def __init__(self, filepath):
         """Init text reader.
         
-         If an input `filepath` is specified, this is opened for reading. 
-         Otherwise, the new object will read from standard input. Input
-         that is GZIP-compressed is identified and extracted to a 
-         temporary file before reading.
+         If the input `filepath` is `-`, the new object will read from standard 
+         input. Otherwise, the specified filepath is opened for reading. Input
+         that is GZIP-compressed is identified and extracted to a temporary file 
+         before reading.
         
         Args:
             filepath (str): Path of input file.
@@ -101,8 +101,15 @@ class TextReader(TextRW):
         
         super(TextReader, self).__init__()
         
-        # If filepath specified, resolve, validate, and open filepath..
-        if filepath is not None:
+        # If filepath indicates standard input, 
+        # prepare to read from standard input..
+        if filepath == '-':
+            
+            self._name = stdin.name
+            self._handle = io.open(stdin.fileno(), mode='rb')
+            
+        # ..otherwise resolve, validate, and open the specified filepath.
+        else:
             
             self._closable = True
             
@@ -115,12 +122,6 @@ class TextReader(TextRW):
                 raise IOError("not a file ~ {!r}".format(self._name))
             
             self._handle = io.open(filepath, mode='rb')
-        
-        # ..otherwise open standard input for reading.
-        else:
-            
-            self._name = stdin.name
-            self._handle = io.open(stdin.fileno(), mode='rb')
         
         # Assume input is text.
         format = 'text'
@@ -240,13 +241,13 @@ class TextReader(TextRW):
 class TextWriter(TextRW):
     """Text writer class."""
     
-    def __init__(self, filepath=None, compress_output=False):
+    def __init__(self, filepath, compress_output=False):
         """Init text writer.
          
-         If an output `filepath` is specified, this is opened for writing. 
-         Otherwise, the new object will write to standard output. Output 
-         is GZIP-compressed if `compress_output` is true, or if a `filepath` 
-         is specified that ends with the GZIP extension `.gz`.
+         If output `filepath` is set to `-`, the new object will write to 
+         standard output. Otherwise, the specified filepath is opened for 
+         writing. Output is GZIP-compressed if `compress_output` is true, 
+         or if a `filepath` is specified that ends with the extension `.gz`.
         
         Args:
             filepath (str): Path of output file.
@@ -255,7 +256,15 @@ class TextWriter(TextRW):
         
         super(TextWriter, self).__init__()
         
-        if filepath is not None:
+        # If filepath indicates standard output, 
+        # prepare to write to standard output..
+        if filepath == '-':
+            
+            self._name = stdout.name
+            self._handle = stdout
+            
+        # ..otherwise resolve, validate, and open the specified filepath.
+        else:
             
             self._closable = True
             
@@ -265,19 +274,14 @@ class TextWriter(TextRW):
             if filepath.endswith('.gz'):
                  compress_output = True
             
-            self._handle = io.open(filepath, mode='w')
-            
-        else:
-        
-            self._name = stdout.name
-            self._handle = stdout
+            self._handle = io.open(filepath, mode='wb')
         
         if compress_output:
             self._handle = GzipFile(fileobj=self._handle)
     
-    def write(self, str):
+    def write(self, x):
         """Write string."""
-        self._handle.write(str)
+        self._handle.write(x)
     
     def writelines(self, sequence):
         """Write lines."""
