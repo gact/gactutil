@@ -39,25 +39,41 @@ _commands = ('filter', 'index', 'prep', 'setrg')
 
 _info = {
     
-    # Supported parameter types. These must be suitable for use both  
-    # as command-line arguments and Python function arguments. Any data type 
-    # added here must be explicitly handled in the function '_proc_args'.
-    'types': { 
-        bool, 
-        float, 
-        int, 
+    # Supported gactfunc object types. These must be suitable for use both as
+    # Python function arguments and as command-line arguments, whether loaded
+    # from a file or converted from a simple string. Any data type added here 
+    # must be explicitly handled in the function '_proc_args'.
+    'types': (
+        type(None),
+        bool,
+        float,
+        int,
         str,
-        dict, 
+        dict,
         list
-     },
+     ),
      
-     # Scalar data types.
-     'scalars': (bool, float, int, str),
+    # Supported gactfunc builtin types. These must be suitable for use both as
+    # Python function arguments and as command-line arguments converted from a 
+    # simple string. Any builtin added here must be explicitly handled in the 
+    # function '_proc_args'.
+    'builtins': (
+        type(None),
+        bool,
+        float,
+        int,
+        str,
+        dict,
+        list
+     ),
      
-     # Collection data types. It should be possible for these to be passed as a 
+     # Compound data types. It should be possible for these to be passed as a 
      # filepath on the command-line, and the process of reading the object from 
      # that file should be handled within the function '_proc_args'.
-    'collections': (dict, list),
+    'compound': (
+        dict,
+        list
+    ),
     
     # Alias parameters: mappings of Python function parameters to command-line 
     # flags. These make it possible for common parameters to take a short form 
@@ -141,7 +157,7 @@ def _dict_from_file(f):
         assert isinstance(x, dict)
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
-     
+    
     return x
 
 def _dict_from_string(s):
@@ -182,8 +198,6 @@ def _dict_to_string(x):
         assert isinstance(s, basestring)
     except (AssertionError, YAMLError):
         raise ValueError("failed to convert dict to string ~ {!r}".format(x))
-    
-    s = ' '.join( s.split() )
     
     return s
 
@@ -263,7 +277,7 @@ def _list_from_file(f):
         # Strip trailing null values.
         while len(x) > 0 and x[-1] is None:
             x.pop()
-        
+    
     return x
 
 def _list_from_string(s):
@@ -289,7 +303,7 @@ def _list_to_file(x, f):
     with TextWriter(f) as writer:
         for element in x:
             try:
-                line = _to_str(element)
+                line = _object_to_string(element)
                 writer.write( '{}\n'.format(line) )
             except (IOError, YAMLError):
                 raise ValueError("failed to output list to file ~ {!r}".format(x))
@@ -305,8 +319,6 @@ def _list_to_string(x):
         assert isinstance(s, basestring)
     except (AssertionError, YAMLError):
         raise ValueError("failed to convert list to string ~ {!r}".format(x))
-    
-    s = ' '.join( s.split() )
     
     return s
 
@@ -578,7 +590,7 @@ def _parse_cmdfunc_docstring(function):
                                 raise ValueError("{} docstring specifies 'NoneType' for parameter {!r}".format(
                                     func_name, param_name))
                             
-                            # Check parameter is of known type.
+                            # Check parameter is of supported non-null type.
                             if type_value is None or type_value not in _info['types']:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                     func_name, type_name, param_name))
@@ -659,8 +671,8 @@ def _parse_cmdfunc_docstring(function):
                                     raise ValueError("{} docstring specifies 'NoneType' for return value".format(
                                         func_name))
                                 
-                                # Check return value type is supported.
-                                if type_value not in _info['types']:
+                                # Check return value type is of supported non-null type.
+                                if type_value is None or type_value not in _info['types']:
                                     raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
                                         func_name, type_name ))
                             
@@ -874,7 +886,7 @@ def _proc_args(args):
         
         # If paremeter is of a collection type, 
         # check both alternative arguments.
-        if param_type in _info['collections']:
+        if param_type in _info['compound']:
             
             # Get file parameter name and argument value.
             file_param_name = '{}_file'.format(param_name)
@@ -1102,7 +1114,7 @@ def _setup_commands():
                     if param_name in _info['alias-params']:
                         
                         # Check that this is not a collection type.
-                        if param_info['type'] in _info['collections']:
+                        if param_info['type'] in _info['compound']:
                             raise TypeError("cannot alias parameter {!r} of type {!r}".format(
                                 param_name, param_info['type'].__name__))
                         
@@ -1121,7 +1133,7 @@ def _setup_commands():
                     # ..otherwise if parameter is of a collection type, create
                     # two (mutually exclusive) parameters: one to accept argument
                     # as a string, the other to load it from a file..
-                    elif param_info['type'] in _info['collections']:
+                    elif param_info['type'] in _info['compound']:
                         
                         # Collection parameters are treated as optionals.
                         # If parameter was positional, set as required.
