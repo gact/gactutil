@@ -158,6 +158,8 @@ def _dict_from_file(f):
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
     
+    _validate_gactfunc_builtin(x)
+    
     return x
 
 def _dict_from_string(s):
@@ -175,10 +177,14 @@ def _dict_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse dict from string ~ {!r}".format(s))
     
+    _validate_gactfunc_builtin(x)
+    
     return x
 
 def _dict_to_file(x, f):
     """Output dictionary to file."""
+    
+    _validate_gactfunc_builtin(x)
     
     try:
         with TextWriter(f) as writer:
@@ -192,6 +198,8 @@ def _dict_to_string(x):
     
     if not isinstance(x, dict):
         raise TypeError("object is not of dict type ~ {!r}".format(x))
+    
+    _validate_gactfunc_builtin(x)
     
     try:
         s = safe_dump(x, default_flow_style=True, width=sys.maxint)
@@ -280,6 +288,8 @@ def _list_from_file(f):
         while len(x) > 0 and x[-1] is None:
             x.pop()
     
+    _validate_gactfunc_builtin(x)
+    
     return x
 
 def _list_from_string(s):
@@ -297,6 +307,8 @@ def _list_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse list from string ~ {!r}".format(s))
     
+    _validate_gactfunc_builtin(x)
+    
     return x
 
 def _list_to_file(x, f):
@@ -312,6 +324,8 @@ def _list_to_file(x, f):
     
 def _list_to_string(x):
     """Convert list to string."""
+    
+    _validate_gactfunc_builtin(x)
     
     if not isinstance(x, list):
         raise TypeError("object is not of list type ~ {!r}".format(x))
@@ -440,12 +454,14 @@ def _string_from_file(f):
     """Get string from file."""
     with TextReader(f) as fh:
         s = fh.read().rstrip()
+    _validate_gactfunc_builtin(s)
     return s
 
 def _string_to_file(s, f):
     """Output string to file."""
     if not isinstance(s, basestring):
-        raise TypeError("object is not of string type ~ {!r}".format(s))    
+        raise TypeError("object is not of string type ~ {!r}".format(s))
+    _validate_gactfunc_builtin(s)
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
 
@@ -1210,6 +1226,34 @@ def _setup_commands():
     cmd_file = os.path.join(data_dir, 'gaction.yaml')
     with open(cmd_file, 'w') as fh:
         dump(cmd_info, fh, default_flow_style=False)
+
+def _validate_gactfunc_builtin(x):
+    """Recursively validate gactfunc builtin object."""
+    
+    if isinstance(x, basestring):
+    
+        if '\n' in x:
+            raise ValueError("gaction string contains newlines ~ {!r}".format(x))
+            
+    elif isinstance(x, dict):
+    
+        for key, value in x.items():
+            
+            try:
+                if '\n' in key:
+                    raise ValueError("gaction dict key contains newlines ~ {!r}".format(key))
+            except TypeError:
+                pass
+             
+            _validate_gactfunc_builtin(value)
+            
+    elif isinstance(x, list):
+    
+        for element in x:
+            _validate_gactfunc_builtin(element)
+    
+    elif not isinstance(x, _info['builtins']):
+        raise TypeError("gaction object is not of supported builtin type ~ {!r}".format(x))
 
 ################################################################################
 
