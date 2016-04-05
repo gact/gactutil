@@ -182,7 +182,7 @@ def _dict_to_file(x, f):
     
     try:
         with TextWriter(f) as writer:
-            safe_dump(x, writer, default_flow_style=False)
+            safe_dump(x, writer, default_flow_style=False, width=sys.maxint)
     except (IOError, YAMLError):
         raise ValueError("failed to output dictionary to file ~ {!r}".format(x))
     
@@ -194,10 +194,12 @@ def _dict_to_string(x):
         raise TypeError("object is not of dict type ~ {!r}".format(x))
     
     try:
-        s = safe_dump(x, default_flow_style=True)
+        s = safe_dump(x, default_flow_style=True, width=sys.maxint)
         assert isinstance(s, basestring)
     except (AssertionError, YAMLError):
         raise ValueError("failed to convert dict to string ~ {!r}".format(x))
+    
+    s = s.rstrip('\n')
     
     return s
 
@@ -315,10 +317,12 @@ def _list_to_string(x):
         raise TypeError("object is not of list type ~ {!r}".format(x))
     
     try:
-        s = safe_dump(x, default_flow_style=True)
+        s = safe_dump(x, default_flow_style=True, width=sys.maxint)
         assert isinstance(s, basestring)
     except (AssertionError, YAMLError):
         raise ValueError("failed to convert list to string ~ {!r}".format(x))
+    
+    s = s.rstrip('\n')
     
     return s
 
