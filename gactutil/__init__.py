@@ -5,6 +5,7 @@
 from abc import ABCMeta
 from binascii import hexlify
 from contextlib import contextmanager
+import errno
 from gzip import GzipFile
 import inspect
 import io
@@ -495,9 +496,16 @@ def TemporaryDirectory(suffix='', prefix='tmp', name=None, dir=None,
         # Resolve path of temp directory.
         twd = resolve_path(twd)
         
-        # Ensure temp directory exists.
-        if not os.path.exists(twd):
+        # Ensure temp directory exists, and that a 
+        # pre-existing directory isn't marked for deletion.
+        try:
             os.makedirs(twd)
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                if delete:
+                    raise RuntimeError("cannot mark pre-existing temp directory for deletion ~ {!r}".format(twd))
+            else:
+                raise e
     
     # ..otherwise, create temp directory in usual way.
     else:
@@ -510,7 +518,7 @@ def TemporaryDirectory(suffix='', prefix='tmp', name=None, dir=None,
             try:
                 rmtree(twd)
             except OSError:
-                warn("failed to remove temp directory ~ {!r}".format(twd), 
+                warn("failed to delete temp directory ~ {!r}".format(twd), 
                     RuntimeWarning)
 
 ################################################################################
