@@ -1269,7 +1269,11 @@ def gaction(argv=None):
     
     function, args = _proc_args(args)
     
-    function( **vars(args) )
+    result = function( **vars(args) )
+    
+    if result is not None:
+        _object_to_file(result, '-')
+    
 
 def main():
     gaction()
