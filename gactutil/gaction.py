@@ -46,14 +46,14 @@ _info = {
         str,
         dict, 
         list
-     },
-     
-     # Scalar data types.
-     'scalars': (bool, float, int, str),
-     
-     # Collection data types. It should be possible for these to be passed as a 
-     # filepath on the command-line, and the process of reading the object from 
-     # that file should be handled within the function '_proc_args'.
+    },
+    
+    # Scalar data types.
+    'scalars': (bool, float, int, str),
+    
+    # Collection data types. It should be possible for these to be passed as a 
+    # filepath on the command-line, and the process of reading the object from 
+    # that file should be handled within the function '_proc_args'.
     'collections': (dict, list),
     
     # Alias parameters: mappings of Python function parameters to command-line 
@@ -997,7 +997,7 @@ def gaction(argv=None):
     args = ap.parse_args(argv)
     
     function, args = _proc_args(args)
-    
+        
     function( **vars(args) )
 
 def main():
