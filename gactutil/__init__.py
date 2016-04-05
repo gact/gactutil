@@ -90,7 +90,7 @@ class TextReader(TextRW):
     
     def __init__(self, filepath):
         """Init text reader.
-        
+         
          If the input `filepath` is `-`, the new object will read from standard 
          input. Otherwise, the specified filepath is opened for reading. Input
          that is GZIP-compressed is identified and extracted to a temporary file 
@@ -101,6 +101,9 @@ class TextReader(TextRW):
         """
         
         super(TextReader, self).__init__()
+        
+        if not isinstance(filepath, basestring):
+            raise TypeError("cannot open filepath of type {!r}".format(type(filepath).__name__))
         
         # If filepath indicates standard input, 
         # prepare to read from standard input..
@@ -178,9 +181,10 @@ class TextReader(TextRW):
             
             # Set handle from text temp file.
             self._handle = io.open(textfile)
-                        
-            # Keep empty sample; sampled bytes already passed to GZIP temp file.
-            self._sample = list()
+            
+            # Start with empty buffer; sampled bytes 
+            # already passed to GZIP temp file.
+            self._buffer = ''
         
         # ..otherwise read input as text.
         else:
@@ -191,15 +195,15 @@ class TextReader(TextRW):
             # Set text handle from input stream.
             self._handle = io.TextIOWrapper(self._handle)
             
-            # Extend sample until the next line separator, 
-            # so sample contains a set of complete lines.
+            # Extend buffer until the next line separator, 
+            # so buffer contains a set of complete lines.
             try:
                 sample += next(self._handle)
             except StopIteration: # NB: for very short input.
                 pass
             
-            # Keep sample for initial reads.
-            self._sample = sample.splitlines(True)
+            # Init buffer from sample.
+            self._buffer = sample
     
     def __iter__(self):
         """Get iterator for reader."""
@@ -207,12 +211,30 @@ class TextReader(TextRW):
     
     def __next__(self):
         """Get next line from reader."""
-        # If sample not expended, read next line from sample..
-        if len(self._sample) > 0:
-            return self._sample.pop(0)
-        # ..otherwise read next line from input handle.
-        else:
-            return next(self._handle)
+        
+        # EOF
+        if self._buffer is None:
+            raise StopIteration
+        
+        try: 
+            # Get next line from buffer.
+            line, self._buffer = self._buffer.split('\n', 1)
+            
+        except ValueError: # Buffer lacks newline.
+                
+            try:
+                # Read line from input stream into buffer.
+                self._buffer = '{}{}'.format(self._buffer, next(self._handle))
+                
+                # Get next line from buffer.
+                line, self._buffer = self._buffer.split('\n', 1)
+                
+            except (StopIteration, ValueError): # EOF
+                
+                # Get last line, flag EOF.
+                line, self._buffer = self._buffer, None
+        
+        return line
     
     def close(self):
         """Close reader."""
@@ -223,21 +245,98 @@ class TextReader(TextRW):
         """Get next line from reader."""
         return self.__next__()
     
-    def read(self):
-        """Read file contents."""
-        return ''.join( self.readlines() )
-    
-    def readline(self):
-        """Read next line from reader."""
-        try:
-            return self.__next__()
-        except StopIteration:
+    def read(self, size=None):
+        """Read bytes from file."""
+        
+        if size is not None and not isinstance(size, int):
+            raise TypeError("size is not of integer type ~ {!r}".format(size))
+        
+        # EOF
+        if self._buffer is None:
             return ''
+        
+        # Read from file while size limit not reached.
+        while size is None or len(self._buffer) < size:
+            try:
+                self._buffer += next(self._handle)
+            except StopIteration:
+                break
+        
+        # If size is specified and within the extent of the 
+        # buffer, take chunk of specified size from buffer..
+        if size is not None and size <= len(self._buffer):
+            chunk, self._buffer = self._buffer[:size], self._buffer[size:]
+        # ..otherwise take entire buffer, flag EOF.
+        else:
+            chunk, self._buffer = self._buffer, None
+        
+        return chunk
     
-    def readlines(self):
-        """Read lines from reader."""
-        for line in self:
-            yield line
+    def readline(self, size=None):
+        """Read next line from file."""
+        
+        if size is not None and not isinstance(size, int):
+            raise TypeError("size is not of integer type ~ {!r}".format(size))
+        
+        # EOF
+        if self._buffer is None:
+            return ''
+        
+        try:
+            # Get next line from buffer.
+            line, self._buffer = self._buffer.split('\n', 1)
+            
+        except ValueError: # Buffer lacks newline.
+                
+            try:
+                # Read line from input stream into buffer.
+                self._buffer += '{}{}'.format(self._buffer, next(self._handle))
+                
+                # Get next line from buffer.
+                line, self._buffer = self._buffer.split('\n', 1)
+                
+            except (StopIteration, ValueError): # EOF
+                
+                # Get last line, flag EOF.
+                line, self._buffer = self._buffer, None
+        
+        # If applicable, truncate line to specified 
+        # length, then push excess back to buffer.
+        if size is not None and len(line) > size:
+            line, excess = line[:size], line[size:]
+            self._buffer = '{}{}'.format(excess, self._buffer)
+        
+        return line
+    
+    def readlines(self, sizehint=None):
+        """Read lines from file."""
+        
+        if sizehint is not None and not isinstance(sizehint, int):
+            raise TypeError("sizehint is not of integer type ~ {!r}".format(sizehint))
+        
+        # EOF
+        if self._buffer is None:
+            return []
+        
+        # Read from file while size hint limit not reached.
+        while sizehint is None or len(self._buffer) < sizehint:
+            try:
+                self._buffer += next(self._handle)
+            except StopIteration:
+                break
+        
+        # Split buffer into lines.
+        lines = self._buffer.splitlines(keepends=True)
+        
+        # If size hint is specified and within the extent of the buffer, 
+        # set buffer to empty string to prepare for any subsequent lines..
+        if sizehint is not None and sizehint <= len(self._buffer):
+            self._buffer = ''
+        # ..otherwise flag EOF.
+        else:
+            self._buffer = None
+         
+        return lines
 
 class TextWriter(TextRW):
     """Text writer class."""
@@ -256,6 +355,9 @@ class TextWriter(TextRW):
         """
         
         super(TextWriter, self).__init__()
+        
+        if not isinstance(filepath, basestring):
+            raise TypeError("cannot open filepath of type {!r}".format(type(filepath).__name__))
         
         # If filepath indicates standard output, 
         # prepare to write to standard output..
