@@ -23,11 +23,14 @@ import sys
 from textwrap import dedent
 
 from yaml import dump
+from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
 
 from gactutil import _read_about
 from gactutil import _read_command_info
+from gactutil import TextReader
+from gactutil import TextWriter
 
 ################################################################################
 
@@ -46,14 +49,14 @@ _info = {
         str,
         dict, 
         list
-    },
-    
-    # Scalar data types.
-    'scalars': (bool, float, int, str),
-    
-    # Collection data types. It should be possible for these to be passed as a 
-    # filepath on the command-line, and the process of reading the object from 
-    # that file should be handled within the function '_proc_args'.
+     },
+     
+     # Scalar data types.
+     'scalars': (bool, float, int, str),
+     
+     # Collection data types. It should be possible for these to be passed as a 
+     # filepath on the command-line, and the process of reading the object from 
+     # that file should be handled within the function '_proc_args'.
     'collections': (dict, list),
     
     # Alias parameters: mappings of Python function parameters to command-line 
@@ -100,127 +103,335 @@ _info = {
 
 ################################################################################
 
+def _bool_from_file(f):
+    """Get bool from file."""
+    with TextReader(f) as fh:
+        s = fh.read().strip()
+    return _bool_from_string(s)
+
 def _bool_from_string(s):
     """Get bool from string."""
     if not isinstance(s, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(s))
-    if s == 'True':
-        value = True
-    elif s == 'False':
-        value = False
-    else:
-        raise ValueError("failed to create 'bool' from string ~ {!r}".format(s))
-    return value
+    try:
+        x = safe_load(s)
+        assert isinstance(x, bool)
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to parse Boolean string ~ {!r}".format(s))
+    return x
 
-def _coerce_from_string(s, return_type):
-    """Coerce string to specified type."""
-    if return_type is None:
-        s = _None_from_string(s)
-    elif return_type == bool:
-        s = _bool_from_string(s)
-    elif return_type == float:
-        s = float(s)
-    elif return_type == int:
-        s = int(s)
-    elif return_type == dict:
-        s = _dict_from_string(s)
-    elif return_type == list:
-        s = _list_from_string(s)
-    else:
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        if return_type != str:
-            raise ValueError("failed to coerce string to unsupported type ~ {!r}".format(return_type.__name__))
-    return s
+def _bool_to_file(x, f):
+    """Output bool to file."""
+    s = _bool_to_string(x)
+    with TextWriter(f) as fh:
+        fh.write('{}\n'.format(s))
 
-def _dict_from_file(dict_file):
+def _bool_to_string(x):
+    """Convert bool to string."""
+    if not isinstance(x, bool):
+        raise TypeError("object is not of type bool ~ {!r}".format(x))
+    return 'true' if x else 'false'
+
+def _dict_from_file(f):
     """Get dictionary from file."""
     
-    if not isinstance(dict_file, basestring):
-        raise TypeError("dictionary filepath is not of type string ~ {!r}".format(dict_file))
-    
     try:
-        with open(dict_file) as fh:
-            result = safe_load(fh)
-        assert isinstance(result, dict)
+        with TextReader(f) as reader:
+            x = safe_load(reader)
+        assert isinstance(x, dict)
     except (AssertionError, IOError, YAMLError):
-        raise ValueError("failed to load dictionary from file ~ {!r}".format(dict_file))
+        raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
      
-    return result
+    return x
 
-def _dict_from_string(dict_string):
+def _dict_from_string(s):
     """Get dictionary from string."""
     
-    if not isinstance(dict_string, basestring):
-        raise TypeError("object is not of type string ~ {!r}".format(dict_string))
+    if not isinstance(s, basestring):
+        raise TypeError("object is not of string type ~ {!r}".format(s))
     
-    if not ( dict_string.startswith('{') and dict_string.endswith('}') ):
-        dict_string = '{' + dict_string + '}'
+    if not ( s.startswith('{') and s.endswith('}') ):
+        s = '{' + s + '}'
     
     try:
-        result = safe_load(dict_string)
-        assert isinstance(result, dict)
+        x = safe_load(s)
+        assert isinstance(x, dict)
     except (AssertionError, YAMLError):
-        raise ValueError("failed to parse dictionary string ~ {!r}".format( 
-            dict_string))
-    return result
+        raise ValueError("failed to parse dict from string ~ {!r}".format(s))
+    
+    return x
 
-def _list_from_file(list_file):
-    """Get list of scalars from file."""
-    
-    if not isinstance(list_file, basestring):
-        raise TypeError("list filepath is not of type string ~ {!r}".format(list_file))
+def _dict_to_file(x, f):
+    """Output dictionary to file."""
     
     try:
-        with open(list_file) as fh:
-            elements = [ line.rstrip() for line in fh.readlines() ]
-    except IOError:
-        raise ValueError("failed to load list from file ~ {!r}".format(list_file))
+        with TextWriter(f) as writer:
+            safe_dump(x, writer, default_flow_style=False)
+    except (IOError, YAMLError):
+        raise ValueError("failed to output dictionary to file ~ {!r}".format(x))
     
-    while len(elements) > 0 and elements[-1] == '':
-        elements.pop()
-    
-    try:
-        result = [ safe_load(x) for x in elements ]
-    except YAMLError:
-        raise ValueError("failed to parse list elements in file ~ {!r}".format(list_file))
-    
-    for element in result:
-        if element is not None and type(element) not in _info['scalars']:
-            raise ValueError("failed to parse element of type {!r} in list file ~ {!r}".format(
-                type(element).__name__, list_file))
-    
-    return result
 
-def _list_from_string(list_string):
-    """Get list of scalars from string."""
+def _dict_to_string(x):
+    """Convert dictionary to string."""
     
-    if not isinstance(list_string, basestring):
-        raise TypeError("object is not of type string ~ {!r}".format(list_string))
-    
-    if not ( list_string.startswith('[') and list_string.endswith(']') ):
-        list_string = '[' + list_string + ']'
+    if not isinstance(x, dict):
+        raise TypeError("object is not of dict type ~ {!r}".format(x))
     
     try:
-        result = safe_load(list_string)
-        assert isinstance(result, list)
+        s = safe_dump(x, default_flow_style=True)
+        assert isinstance(s, basestring)
     except (AssertionError, YAMLError):
-        raise ValueError("failed to parse list string ~ {!r}".format(list_string))
+        raise ValueError("failed to convert dict to string ~ {!r}".format(x))
     
-    for element in result:
-        if element is not None and type(element) not in _info['scalars']:
-            raise ValueError("failed to parse element of type {!r} in list string ~ {!r}".format(
-                type(element).__name__, list_string))
+    s = ' '.join( s.split() )
     
-    return result
+    return s
+
+def _float_from_file(f):
+    """Get float from file."""
+    with TextReader(f) as fh:
+        s = fh.read().strip()
+    return float(s)
+
+def _float_to_file(x, f):
+    """Output float to file."""
+    if not isinstance(x, float):
+        raise TypeError("object is not of float type ~ {!r}".format(x))
+    s = str(x)
+    with TextWriter(f) as fh:
+        fh.write('{}\n'.format(s))
+
+def _int_from_file(f):
+    """Get integer from file."""
+    with TextReader(f) as fh:
+        s = fh.read().strip()
+    return int(s)
+
+def _int_to_file(x, f):
+    """Output integer to file."""
+    if not isinstance(x, int):
+        raise TypeError("object is not of integer type ~ {!r}".format(x))    
+    s = str(x)
+    with TextWriter(f) as fh:
+        fh.write('{}\n'.format(s))
+
+def _list_from_file(f):
+    """Get list from file."""
+    
+    with TextReader(f) as reader:
+        
+        document_ended = False
+        x = list()
+        
+        for line in reader:
+            
+            # Strip comments.
+            try:
+                i = line.index('#')
+            except ValueError:
+                pass
+            else:
+                line = line[:i]
+            
+            # Strip leading/trailing whitespace.
+            line = line.strip()
+            
+            # Skip lines after explicit document end.
+            if document_ended:
+                if line != '':
+                    raise RuntimeError("list elements found after document end")
+                continue
+            
+            # Check for document separator.
+            if line == '---':
+                raise RuntimeError("expected a single document in list stream")
+            
+            try:
+                element = safe_load(line)
+            except YAMLError as e:
+                # If explicit document end, flag and continue to next line..
+                if e.problem == "expected the node content, but found '<document end>'":
+                    document_ended = True
+                    element = None
+                    continue
+                else:
+                    raise e
+            
+            # Append line.
+            x.append(element)
+        
+        # Strip trailing null values.
+        while len(x) > 0 and x[-1] is None:
+            x.pop()
+        
+    return x
+
+def _list_from_string(s):
+    """Get list from string."""
+    
+    if not isinstance(s, basestring):
+        raise TypeError("object is not of string type ~ {!r}".format(s))
+    
+    if not ( s.startswith('[') and s.endswith(']') ):
+        s = '[' + s + ']'
+    
+    try:
+        x = safe_load(s)
+        assert isinstance(x, list)
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to parse list from string ~ {!r}".format(s))
+    
+    return x
+
+def _list_to_file(x, f):
+    """Output list to file."""
+    
+    with TextWriter(f) as writer:
+        for element in x:
+            try:
+                line = _to_str(element)
+                writer.write( '{}\n'.format(line) )
+            except (IOError, YAMLError):
+                raise ValueError("failed to output list to file ~ {!r}".format(x))
+    
+def _list_to_string(x):
+    """Convert list to string."""
+    
+    if not isinstance(x, list):
+        raise TypeError("object is not of list type ~ {!r}".format(x))
+    
+    try:
+        s = safe_dump(x, default_flow_style=True)
+        assert isinstance(s, basestring)
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to convert list to string ~ {!r}".format(x))
+    
+    s = ' '.join( s.split() )
+    
+    return s
+
+def _None_from_file(f):
+    """Get None from file."""
+    with TextReader(f) as fh:
+        s = fh.read().strip()
+    return _None_from_string(s)
 
 def _None_from_string(s):
     """Get None from string."""
     if not isinstance(s, basestring):
         raise TypeError("object is not of type string ~ {!r}".format(s))
-    if s != 'None':
+    if s != 'null':
         raise ValueError("failed to create 'NoneType' from string ~ {!r}".format(s))
     return None
+
+def _None_to_file(x, f):
+    """Output None to file."""
+    s = _None_to_string(x)
+    with TextWriter(f) as fh:
+        fh.write('{}\n'.format(s))
+
+def _None_to_string(x):
+    """Convert None to string."""
+    if x is not None:
+        raise TypeError("object is not None ~ {!r}".format(x))
+    return 'null'
+
+def _object_from_file(f, object_type):
+    """Get object from file."""
+    if object_type is None:
+        x = _None_from_file(f)
+    elif object_type == bool:
+        x = _bool_from_file(f)
+    elif object_type == float:
+        x = _float_from_file(f)
+    elif object_type == int:
+        x = _int_from_file(f)
+    elif object_type == dict:
+        x = _dict_from_file(f)
+    elif object_type == list:
+        x = _list_from_file(f)
+    elif isinstance(s, basestring):
+        x = _string_from_file(f)
+    elif object_type != str:
+        raise ValueError("failed to get unsupported type from file ~ {!r}".format(object_type.__name__))
+    else:
+        raise TypeError("file not found ~ {!r}".format(f))
+    return x
+
+def _object_from_string(s, object_type):
+    """Get object from string."""
+    if object_type is None:
+        x = _None_from_string(s)
+    elif object_type == bool:
+        x = _bool_from_string(s)
+    elif object_type == float:
+        x = float(s)
+    elif object_type == int:
+        x = int(s)
+    elif object_type == dict:
+        x = _dict_from_string(s)
+    elif object_type == list:
+        x = _list_from_string(s)
+    elif isinstance(s, basestring):
+        x = s
+    elif object_type != str:
+        raise ValueError("failed to get unsupported type from string ~ {!r}".format(object_type.__name__))
+    else:
+        raise TypeError("object is not of type string ~ {!r}".format(s))
+    return x
+
+def _object_to_file(x, f):
+    """Output object to file."""
+    if x is None:
+        _None_to_file(x, f)
+    elif isinstance(x, bool):
+        _bool_to_file(x, f)
+    elif isinstance(x, float):
+        _float_to_file(x, f)
+    elif isinstance(x, int):
+        _int_to_file(x, f)
+    elif isinstance(x, dict):
+        _dict_to_file(x, f)
+    elif isinstance(x, list):
+        _list_to_file(x, f)
+    elif isinstance(x, basestring):
+        _string_to_file(x, f)
+    else:
+        raise ValueError("failed to output object of unsupported type to file ~ {!r}".format(type(x).__name__))
+    return s
+
+def _object_to_string(x):
+    """Convert object to string."""
+    if x is None:
+        s = _None_to_string(x)
+    elif isinstance(x, bool):
+        s = _bool_to_string(x)
+    elif isinstance(x, float):
+        s = str(x)
+    elif isinstance(x, int):
+        s = str(x)
+    elif isinstance(x, dict):
+        s = _dict_to_string(x)
+    elif isinstance(x, list):
+        s = _list_to_string(x)
+    elif isinstance(x, basestring):
+        s = x
+    else:
+        raise ValueError("failed to convert object of unsupported type to string ~ {!r}".format(type(x).__name__))
+    return s
+
+def _string_from_file(f):
+    """Get string from file."""
+    with TextReader(f) as fh:
+        s = fh.read().rstrip()
+    return s
+
+def _string_to_file(s, f):
+    """Output string to file."""
+    if not isinstance(s, basestring):
+        raise TypeError("object is not of string type ~ {!r}".format(s))    
+    with TextWriter(f) as fh:
+        fh.write('{}\n'.format(s))
 
 def _parse_cmdfunc_docstring(function):
     """Parse command-function docstring.
@@ -852,7 +1063,7 @@ def _setup_commands():
                         docstring_default = func_info['params'][param_name]['docstring-default']
                         
                         try: # Coerce documented default from string.
-                            coerced_default = _coerce_from_string(docstring_default, param_type)
+                            coerced_default = _object_from_string(docstring_default, param_type)
                         except (TypeError, ValueError):
                             raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
                                 func_info['name'], param_name))
@@ -997,7 +1208,7 @@ def gaction(argv=None):
     args = ap.parse_args(argv)
     
     function, args = _proc_args(args)
-        
+    
     function( **vars(args) )
 
 def main():
