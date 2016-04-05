@@ -16,7 +16,10 @@ from inspect import getmembers
 from inspect import getmodule
 from inspect import isfunction
 from inspect import stack
+from io import BytesIO
 import os
+from pandas import DataFrame
+from pandas import read_csv
 from pydoc import locate
 import re
 import sys
@@ -50,7 +53,8 @@ _info = {
         int,
         str,
         dict,
-        list
+        list,
+        DataFrame
      ),
      
     # Supported gactfunc builtin types. These must be suitable for use both as
@@ -72,8 +76,18 @@ _info = {
      # that file should be handled within the function '_proc_args'.
     'compound': (
         dict,
-        list
+        list,
+        DataFrame
     ),
+    
+    # True values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
+    'true_values': ('yes', 'Yes', 'YES', 'true', 'True', 'TRUE', 'on', 'On', 'ON'),
+    
+    # False values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
+    'false_values': ('no', 'No', 'NO', 'false', 'False', 'FALSE', 'off', 'Off', 'OFF'),
+    
+    # Null values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
+    'na_values': ('null', 'Null', 'NULL'),
     
     # Alias parameters: mappings of Python function parameters to command-line 
     # flags. These make it possible for common parameters to take a short form 
@@ -147,6 +161,64 @@ def _bool_to_string(x):
     if not isinstance(x, bool):
         raise TypeError("object is not of type bool ~ {!r}".format(x))
     return 'true' if x else 'false'
+
+def _DataFrame_from_file(f):
+    """Get Pandas DataFrame from file."""
+    
+    try:
+        with TextReader(f) as reader:
+            x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False, 
+                skipinitialspace=True, true_values=_info['true_values'], 
+                false_values=_info['false_values'], keep_default_na=False,
+                na_values=_info['na_values'])
+    except (IOError, OSError):
+        raise RuntimeError("failed to get DataFrame from file ~ {!r}".format(f))
+    
+    return x
+
+def _DataFrame_from_string(s):
+    """Get Pandas DataFrame from string."""
+    
+    if not isinstance(s, basestring):
+        raise TypeError("object is not of string type ~ {!r}".format(s))
+    
+    try:
+        with BytesIO(s) as fh:
+            x = read_csv(fh, sep=',', header=0, mangle_dupe_cols=False, 
+                skipinitialspace=True, true_values=_info['true_values'], 
+                false_values=_info['false_values'], keep_default_na=False,
+                na_values=_info['na_values'])
+    except (IOError, OSError):
+        raise RuntimeError("failed to get DataFrame from string ~ {!r}".format(f))
+    
+    return x
+
+def _DataFrame_to_file(x, f):
+    """Output Pandas DataFrame to file."""
+    
+    if not isinstance(x, DataFrame):
+        raise TypeError("object is not a Pandas DataFrame ~ {!r}".format(x))
+    
+    try:
+        with TextWriter(f) as writer:
+            x.to_csv(writer, sep=',', na_rep=_info['na_values'][0], index=False)
+    except (IOError, OSError):
+        raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
+
+def _DataFrame_to_string(x):
+    """Convert Pandas DataFrame to string."""
+    
+    if not isinstance(x, DataFrame):
+        raise TypeError("object is not a Pandas DataFrame ~ {!r}".format(x))
+    
+    try:
+        with BytesIO() as fh:
+            x.to_csv(fh, sep=',', na_rep=_info['na_values'][0], index=False)
+            s = fh.getvalue()
+    except (IOError, OSError):
+        raise ValueError("failed to output DataFrame to string ~ {!r}".format(x))
+    
+    return s
 
 def _dict_from_file(f):
     """Get dictionary from file."""
@@ -380,6 +452,8 @@ def _object_from_file(f, object_type):
         x = _dict_from_file(f)
     elif object_type == list:
         x = _list_from_file(f)
+    elif object_type == DataFrame:
+        x = _DataFrame_from_file(f)
     elif isinstance(s, basestring):
         x = _string_from_file(f)
     elif object_type != str:
@@ -402,6 +476,8 @@ def _object_from_string(s, object_type):
         x = _dict_from_string(s)
     elif object_type == list:
         x = _list_from_string(s)
+    elif object_type == DataFrame:
+        x = _DataFrame_from_string(s)
     elif isinstance(s, basestring):
         x = s
     elif object_type != str:
@@ -424,6 +500,8 @@ def _object_to_file(x, f):
         _dict_to_file(x, f)
     elif isinstance(x, list):
         _list_to_file(x, f)
+    elif isinstance(x, DataFrame):
+        _DataFrame_to_file(x, f)
     elif isinstance(x, basestring):
         _string_to_file(x, f)
     else:
@@ -444,6 +522,8 @@ def _object_to_string(x):
         s = _dict_to_string(x)
     elif isinstance(x, list):
         s = _list_to_string(x)
+    elif isinstance(x, DataFrame):
+        s = _DataFrame_to_string(x)
     elif isinstance(x, basestring):
         s = x
     else:
@@ -839,33 +919,42 @@ def _prep_argparser():
                             action = 'store_true', 
                             help   = param_info['description'])
                             
-                    elif param_info['group'] == 'collection':
+                    elif param_info['group'] == 'compound':
                         
-                        # Set info for pair of alternative parameters.
-                        title = '{} argument'.format( param_name.replace('_', '-') )
-                        file_param_name = '{}_file'.format(param_name)
-                        file_flag = '{}-file'.format(param_info['flag'])
-                        item_help = 'Set {} from string.'.format(
-                            param_info['type'].__name__)
-                        file_help = 'Load {} from file.'.format(
-                            param_info['type'].__name__)
+                        # If compound object parameter is a builtin, prepare
+                        # to read it from command line or load it from file..
+                        if param_info['type'] in _info['builtins']:
                         
-                        # Add (mutually exclusive) pair of alternative parameters.
-                        ag = apq.add_argument_group(
-                            title       = title, 
-                            description = param_info['description'])
-                        mxg = ag.add_mutually_exclusive_group(
-                            required    = param_info['required'])
-                        mxg.add_argument(param_info['flag'], 
-                            dest        = param_name, 
-                            metavar     = 'STR',
-                            default     = param_info['default'], 
-                            help        = item_help)
-                        mxg.add_argument(file_flag, 
-                            dest        = file_param_name, 
-                            metavar     = 'PATH',
-                            help        = file_help)
-            
+                            # Set info for pair of alternative parameters.
+                            item_help = 'Set {} from string.'.format(param_info['type'].__name__)
+                            file_help = 'Load {} from file.'.format(param_info['type'].__name__)
+                            
+                            # Add (mutually exclusive) pair of alternative parameters.
+                            ag = apq.add_argument_group(
+                                title       = param_info['title'], 
+                                description = param_info['description'])
+                            mxg = ag.add_mutually_exclusive_group(
+                                required    = param_info['required'])
+                            mxg.add_argument(param_info['flag'], 
+                                dest        = param_name, 
+                                metavar     = 'STR',
+                                default     = param_info['default'], 
+                                help        = item_help)
+                            mxg.add_argument(param_info['file_flag'], 
+                                dest        = param_info['file_param_name'], 
+                                metavar     = 'PATH',
+                                help        = file_help)
+                        
+                        # ..otherwise prepare to load it from file.
+                        else:
+                            
+                            apq.add_argument(param_info['file_flag'], 
+                            dest     = param_info['file_param_name'], 
+                            metavar  = 'PATH',
+                            default  = param_info['default'], 
+                            required = param_info['required'], 
+                            help     = param_info['description'])
+                            
             # Set function for this commmand.
             apq.set_defaults(function=function)
     
@@ -895,22 +984,24 @@ def _proc_args(args):
     # Process each argument.
     for param_name in param_info:
         
+        # Assume argument is not to be loaded from file.
+        filebound = False
+        
         # Get expected argument type.
         param_type = param_info[param_name]['type']
         
         # Get argument value.
-        arg = args.__dict__[param_name]
+        try:
+            arg = args.__dict__[param_name]
+        except KeyError: # Filebound compound type.
+            arg = args.__dict__[param_name] = None
         
-        # Assume argument is not to be loaded from file.
-        filebound = False
-        
-        # If paremeter is of a collection type, 
+        # If parameter is of a compound type, 
         # check both alternative arguments.
         if param_type in _info['compound']:
             
-            # Get file parameter name and argument value.
-            file_param_name = '{}_file'.format(param_name)
-            file_arg = args.__dict__[file_param_name]
+            # Get file argument value.
+            file_arg = args.__dict__[ param_info['file_param_name'] ]
             
             # If file argument specified, set argument value from file 
             # argument, indicate argument value is to be loaded from file..
@@ -919,37 +1010,17 @@ def _proc_args(args):
                 filebound = True
             # ..otherwise check argument specified (if required).
             elif arg is None and param_info[param_name]['required']:
-                raise ArgumentError("option {!r} is required".format(
-                    param_info[param_name]['flag']))
+                raise ArgumentError("{} is required".format(param_info['title']))
             
             # Remove file parameter from parsed arguments.
-            del args.__dict__[file_param_name]
+            del args.__dict__[ param_info['file_param_name'] ]
         
-        # If argument specified, process it.
+        # If argument specified, get from file or string.
         if arg is not None:
-            try:
-                if param_type == bool:
-                    args.__dict__[param_name] = _bool_from_string(arg)
-                elif param_type == float:
-                    args.__dict__[param_name] = float(arg)
-                elif param_type == int:
-                    args.__dict__[param_name] = int(arg)
-                elif param_type == dict:
-                    if filebound:
-                        args.__dict__[param_name] = _dict_from_file(arg)
-                    elif isinstance(args.__dict__[param_name], basestring):
-                        args.__dict__[param_name] = _dict_from_string(arg)
-                elif param_type == list:
-                    if filebound:
-                        args.__dict__[param_name] = _list_from_file(arg)
-                    elif isinstance(args.__dict__[param_name], basestring):
-                        args.__dict__[param_name] = _list_from_string(arg)
-                elif param_type != str:
-                    raise ArgumentError("failed to process argument {!r} of unsupported type {!r}".format(
-                        param_name, param_type.__name__))
-            except IOError:
-                raise ArgumentError("failed to process argument {!r} of type {!r}".format(
-                    param_name, param_type.__name__))
+            if filebound:
+                args.__dict__[param_name] = _object_from_file(arg)
+            else:
+                args.__dict__[param_name] = _object_from_string(arg)
     
     return function, args
 
@@ -1133,7 +1204,7 @@ def _setup_commands():
                     # If parameter has a short form, convert to short form..
                     if param_name in _info['alias-params']:
                         
-                        # Check that this is not a collection type.
+                        # Check that this is not a compound type.
                         if param_info['type'] in _info['compound']:
                             raise TypeError("cannot alias parameter {!r} of type {!r}".format(
                                 param_name, param_info['type'].__name__))
@@ -1150,30 +1221,40 @@ def _setup_commands():
                         # Mark as short form optional.
                         param_info['group'] = 'short'
                     
-                    # ..otherwise if parameter is of a collection type, create
+                    # ..otherwise if parameter is of a compound type, create
                     # two (mutually exclusive) parameters: one to accept argument
                     # as a string, the other to load it from a file..
                     elif param_info['type'] in _info['compound']:
                         
-                        # Collection parameters are treated as optionals.
+                        # Compound parameters are treated as optionals.
                         # If parameter was positional, set as required.
                         if param_info['group'] == 'positional':
                             param_info['required'] = True
                             param_info['default'] = None
                         
-                        # Mark as 'collection'.
-                        param_info['group'] = 'collection'
+                        # Mark as 'compound'.
+                        param_info['group'] = 'compound'
                         
-                        # Set parameter flag.
-                        param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
+                        # Set compound parameter title.
+                        param_info['title'] = '{} argument'.format( param_name.replace('_', '-') )
                         
-                        # Check that file option string does 
+                        # If parameter is of builtin type, set flag for 
+                        # it to be passed directly on the command line.
+                        if param_info['type'] in _info['builtins']:
+                            param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
+                        
+                        # Set file parameter name.
+                        param_info['file_param_name'] = '{}_file'.format(param_name)
+                        
+                        # Set flag for parameter to be passed as a file.
+                        param_info['file_flag'] = '--{}-file'.format( param_name.replace('_', '-') )
+                        
+                        # Check that file option string does
                         # not conflict with existing options.
-                        file_flag = '{}-file'.format(param_info['flag'])
-                        if file_flag in flag_set:
+                        if param_info['file_flag'] in flag_set:
                             raise ValueError("{} parameter {!r} has conflicting alternative option {!r}".format(
-                                func_info['name'], param_name, file_flag))
-                        flag_set.add(file_flag)
+                                func_info['name'], param_name, param_info['file_flag']))
+                        flag_set.add(param_info['file_flag'])
                         
                     # ..otherwise if option or switch, 
                     # create flag from parameter name.
