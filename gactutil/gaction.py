@@ -1017,9 +1017,9 @@ def _proc_args(args):
         # If argument specified, get from file or string.
         if arg is not None:
             if filebound:
-                args.__dict__[param_name] = _object_from_file(arg)
+                args.__dict__[param_name] = _object_from_file(arg, param_type)
             else:
-                args.__dict__[param_name] = _object_from_string(arg)
+                args.__dict__[param_name] = _object_from_string(arg, param_type)
     
     return function, args
 
