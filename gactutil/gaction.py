@@ -546,7 +546,7 @@ def _string_to_file(s, f):
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
 
-def _parse_cmdfunc_docstring(function):
+def _parse_gactfunc_docstring(function):
     """Parse command-function docstring.
     
     This function parses a command function docstring and returns an ordered 
@@ -805,7 +805,7 @@ def _parse_cmdfunc_docstring(function):
        
     return doc_info
 
-def _parse_cmdfunc_name(function):
+def _parse_gactfunc_name(function):
     """Parse command-function name."""
     
     # Get function name.
@@ -988,7 +988,7 @@ def _proc_args(args):
         raise RuntimeError("cannot run command - no function available")
     
     # Get parameter info for this command function.
-    command, qualifier = _parse_cmdfunc_name(function)
+    command, qualifier = _parse_gactfunc_name(function)
     param_info = cmd_info[command][qualifier]['params']
     
     # Get output file for return value, if applicable.
@@ -1079,7 +1079,7 @@ def _setup_commands():
     cmd_info = dict()
     for mod_name, func_name, function in func_tuples:
         try:
-            command, qualifier = _parse_cmdfunc_name(function)
+            command, qualifier = _parse_gactfunc_name(function)
         except (TypeError, ValueError):
             continue
         if command in cmd_info and qualifier in cmd_info[command]:
@@ -1119,7 +1119,7 @@ def _setup_commands():
                 spec_def_info = None
             
             # Set docstring info from command-function docstring.
-            doc_info = _parse_cmdfunc_docstring(function)
+            doc_info = _parse_gactfunc_docstring(function)
             
             # Check that command function has been documented.
             if doc_info is None:
