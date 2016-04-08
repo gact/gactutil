@@ -692,7 +692,7 @@ def _parse_cmdfunc_docstring(function):
                                     func_name, param_name))
                             
                             # Check parameter type is supported.
-                            if type_value is None or type_value not in _info['types']:
+                            if type_value not in _info['types']:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                     func_name, type_name, param_name))
                             
