@@ -14,6 +14,7 @@ from importlib import import_module
 from inspect import getargspec
 from inspect import getmembers
 from inspect import getmodule
+from inspect import getsource
 from inspect import isfunction
 from inspect import stack
 from io import BytesIO
@@ -32,6 +33,7 @@ from yaml import YAMLError
 
 from gactutil import _read_about
 from gactutil import _read_command_info
+from gactutil import _tokenise_source
 from gactutil import TextReader
 from gactutil import TextWriter
 
@@ -105,7 +107,7 @@ _info = {
         'outfile1': '--1',
         'outfile2': '--2'
     },
-    
+     
     # Command-function docstring headers.
     'docstring-headers': {
         
@@ -126,7 +128,7 @@ _info = {
         'command-function': re.compile( '^({})_(\w+)$'.format('|'.join(_commands))),
         'docstring-header': re.compile('^(\w+):\s*$'),
         'docstring-param': re.compile('^([*]{0,2}\w+)\s*(?:\((\w+)\))?:\s+(.+)$'),
-        'docstring-return': re.compile('^(\w+):\s+(.+)$'),
+        'docstring-return': re.compile('^(?:(\w+):\s+)?(.+)$'),
         'docstring-default': re.compile('[[(]default:\s+(.+?)\s*[])]', re.IGNORECASE)
     }
 }
@@ -689,7 +691,7 @@ def _parse_cmdfunc_docstring(function):
                                 raise ValueError("{} docstring specifies 'NoneType' for parameter {!r}".format(
                                     func_name, param_name))
                             
-                            # Check parameter is of supported non-null type.
+                            # Check parameter type is supported.
                             if type_value is None or type_value not in _info['types']:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                     func_name, type_name, param_name))
@@ -737,9 +739,6 @@ def _parse_cmdfunc_docstring(function):
                 
             elif h == 'Returns':
                 
-                # Init parsed return value info.
-                ret_info = OrderedDict()
-                
                 type_value = None
                 description = list()
                 
@@ -751,46 +750,49 @@ def _parse_cmdfunc_docstring(function):
                     # Skip blank lines.
                     if line != '':
                         
-                        # If this is the first line, try to get type info.
-                        if len(ret_info) == 0:
+                        # Try to match line to expected pattern of return value.
+                        m = _info['pattern']['docstring-return'].match(line)
                             
-                            # Try to match line to expected pattern of return value.
-                            m = _info['pattern']['docstring-return'].match(line)
+                        # If return value type info is present, 
+                        # get type info and initial description..
+                        if m is not None:
+                                
+                            type_name = m.group(1)
+                            description.append( m.group(2) )
+                                
+                            # Check parameter type specified.
+                            if type_name is None:
+                                raise ValueError("{} docstring must specify a type for return value".format(
+                                    func_name))
+                                
+                            type_value = locate(type_name)
+                                
+                            # Check type name is not 'None'.
+                            if type_name == 'None':
+                                raise ValueError("{} docstring specifies 'None' for return value".format(
+                                    func_name))
+                                
+                            # Check return value type is supported.
+                            if type_value not in _info['types']:
+                                raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
+                                    func_name, type_name ))
                             
-                            # If return value type info is present, 
-                            # get type info and initial description..
-                            if m is not None:
-                                
-                                type_name = m.group(1)
-                                description.append( m.group(2) )
-                                type_value = locate(type_name)
-                                
-                                # Check type name is not 'None'.
-                                if type_name == 'None':
-                                    raise ValueError("{} docstring specifies 'NoneType' for return value".format(
-                                        func_name))
-                                
-                                # Check return value type is of supported non-null type.
-                                if type_value is None or type_value not in _info['types']:
-                                    raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
-                                        func_name, type_name ))
+                        # ..otherwise if return value type already
+                        # identified, append line to description..
+                        elif type_value is not None:
                             
-                            # ..otherwise set description from first line.
-                            else:
-                                description.append(line)
-                        
-                        # ..otherwise append to description.
-                        else:
                             description.append(line)
+                            
+                        # ..otherwise this is not a valid docstring return value.
+                        else:
+                            raise ValueError("failed to parse docstring for function ~ {!r}".format(
+                                func_name))
                 
-                # Set return value info.
-                ret_info = { 
+                # Set parsed return value info for docstring.
+                doc_info[h] = { 
                     'type': type_value,
                     'description': ' '.join(description)
                 }
-                
-                # Set parsed return value info for docstring.
-                doc_info[h] = ret_info
                 
             else:
                 
@@ -888,16 +890,15 @@ def _prep_argparser():
                     # Get info for this parameter.
                     param_info = cmd_info[c][q]['params'][param_name]
                     
-                    # Add parameter to argparser.
                     if param_info['group'] == 'positional':
                     
-                        apq.add_argument(param_name, 
+                        apq.add_argument(param_info['dest'], 
                             help = param_info['description'])
                             
                     elif param_info['group'] == 'optional':
                     
                         apq.add_argument(param_info['flag'], 
-                            dest     = param_name, 
+                            dest     = param_info['dest'], 
                             metavar  = param_info['type'].__name__.upper(),
                             default  = param_info['default'], 
                             required = param_info['required'], 
@@ -906,7 +907,7 @@ def _prep_argparser():
                     elif param_info['group'] == 'short':
                         
                         apq.add_argument(param_info['flag'], 
-                            dest     = param_name, 
+                            dest     = param_info['dest'],
                             default  = param_info['default'], 
                             required = param_info['required'], 
                             help     = param_info['description'])
@@ -914,7 +915,7 @@ def _prep_argparser():
                     elif param_info['group'] == 'switch':
                     
                         apq.add_argument(param_info['flag'], 
-                            dest   = param_name, 
+                            dest   = param_info['dest'], 
                             action = 'store_true', 
                             help   = param_info['description'])
                             
@@ -930,17 +931,17 @@ def _prep_argparser():
                             
                             # Add (mutually exclusive) pair of alternative parameters.
                             ag = apq.add_argument_group(
-                                title       = param_info['title'], 
+                                title       = param_info['title'],
                                 description = param_info['description'])
                             mxg = ag.add_mutually_exclusive_group(
                                 required    = param_info['required'])
-                            mxg.add_argument(param_info['flag'], 
-                                dest        = param_name, 
+                            mxg.add_argument(param_info['flag'],
+                                dest        = param_info['dest'],
                                 metavar     = 'STR',
-                                default     = param_info['default'], 
+                                default     = param_info['default'],
                                 help        = item_help)
-                            mxg.add_argument(param_info['file_flag'], 
-                                dest        = param_info['file_param_name'], 
+                            mxg.add_argument(param_info['file_flag'],
+                                dest        = param_info['file_dest'],
                                 metavar     = 'PATH',
                                 help        = file_help)
                         
@@ -948,12 +949,22 @@ def _prep_argparser():
                         else:
                             
                             apq.add_argument(param_info['file_flag'], 
-                            dest     = param_info['file_param_name'], 
+                            dest     = param_info['file_dest'], 
                             metavar  = 'PATH',
                             default  = param_info['default'], 
                             required = param_info['required'], 
                             help     = param_info['description'])
-                            
+            
+            # If command function has a return value, add a parameter
+            # to set the file to which the return value will be output.
+            if 'returns' in cmd_info[c][q]:
+                return_info = cmd_info[c][q]['returns'] 
+                apq.add_argument(return_info['flag'],
+                    dest     = return_info['dest'],
+                    default  = return_info['default'],
+                    required = return_info['required'],
+                    help     = return_info['description'])
+            
             # Set function for this commmand.
             apq.set_defaults(function=function)
     
@@ -980,6 +991,12 @@ def _proc_args(args):
     command, qualifier = _parse_cmdfunc_name(function)
     param_info = cmd_info[command][qualifier]['params']
     
+    # Get output file for return value, if applicable.
+    if 'returns' in cmd_info[command][qualifier]:
+        outfile = args.__dict__.pop('outfile')
+    else:
+        outfile = None
+    
     # Process each argument.
     for param_name in param_info:
         
@@ -995,12 +1012,12 @@ def _proc_args(args):
         except KeyError: # Filebound compound type.
             arg = args.__dict__[param_name] = None
         
-        # If parameter is of a compound type, 
+        # If parameter is in compound group, 
         # check both alternative arguments.
-        if param_type in _info['compound']:
+        if param_info[param_name]['group'] == 'compound': 
             
             # Get file argument value.
-            file_arg = args.__dict__[ param_info['file_param_name'] ]
+            file_arg = args.__dict__[ param_info[param_name]['file_dest'] ]
             
             # If file argument specified, set argument value from file 
             # argument, indicate argument value is to be loaded from file..
@@ -1012,7 +1029,7 @@ def _proc_args(args):
                 raise ArgumentError("{} is required".format(param_info['title']))
             
             # Remove file parameter from parsed arguments.
-            del args.__dict__[ param_info['file_param_name'] ]
+            del args.__dict__[ param_info[param_name]['file_dest'] ]
         
         # If argument specified, get from file or string.
         if arg is not None:
@@ -1021,7 +1038,7 @@ def _proc_args(args):
             else:
                 args.__dict__[param_name] = _object_from_string(arg, param_type)
     
-    return function, args
+    return function, args, outfile
 
 def _setup_commands():
     """Setup package commands.
@@ -1113,6 +1130,9 @@ def _setup_commands():
             if 'Description' in doc_info:
                 func_info['description'] = doc_info['Description']
             
+            # Init flag set to check for conflicting option strings.
+            flag2param = dict()
+            
             # If parameters documented, validate them..
             if 'Args' in doc_info:
                 
@@ -1175,14 +1195,14 @@ def _setup_commands():
                             raise ValueError("{} has default value mismatch for parameter {!r}".format(
                                 func_info['name'], param_name))
                 
-                # Init flag set to check for conflicting option strings.
-                flag_set = set()
-                
                 # Prepare parameters for argument parser.
                 for param_name in func_info['params']:
                     
                     # Get info for this parameter.
                     param_info = func_info['params'][param_name]
+                    
+                    # Set parameter name to be used in argument parser.
+                    param_info['dest'] = param_name
                     
                     # If parameter has a default value, set as option or switch..
                     if 'default' in param_info:
@@ -1243,17 +1263,17 @@ def _setup_commands():
                             param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
                         
                         # Set file parameter name.
-                        param_info['file_param_name'] = '{}_file'.format(param_name)
+                        param_info['file_dest'] = '{}_file'.format(param_name)
                         
                         # Set flag for parameter to be passed as a file.
-                        param_info['file_flag'] = '--{}-file'.format( param_name.replace('_', '-') )
+                        param_info['file_flag'] = file_flag = '--{}-file'.format( param_name.replace('_', '-') )
                         
                         # Check that file option string does
                         # not conflict with existing options.
-                        if param_info['file_flag'] in flag_set:
-                            raise ValueError("{} parameter {!r} has conflicting alternative option {!r}".format(
-                                func_info['name'], param_name, param_info['file_flag']))
-                        flag_set.add(param_info['file_flag'])
+                        if file_flag in flag2param:
+                            raise ValueError("file flag of {} parameter {!r} conflicts with {!r}".format(
+                                func_info['name'], param_name, flag2param[file_flag]))
+                        flag2param[file_flag] = '{} file flag'.format(param_name)
                         
                     # ..otherwise if option or switch, 
                     # create flag from parameter name.
@@ -1281,10 +1301,11 @@ def _setup_commands():
                     
                     # Check for conflicting option strings.
                     if 'flag' in param_info:
-                        if param_info['flag'] in flag_set:
-                            raise ValueError("{} parameter {!r} has conflicting option {!r}".format(
-                                func_info['name'], param_name, param_info['flag']))
-                        flag_set.add(param_info['flag'])
+                        flag = param_info['flag']
+                        if flag in flag2param:
+                            raise ValueError("flag of {} parameter {!r} conflicts with {!r}".format(
+                                func_info['name'], param_name, flag2param[flag]))
+                        flag2param[flag] = param_name
                     
                     # Update parameter info.
                     func_info['params'][param_name] = param_info
@@ -1293,6 +1314,36 @@ def _setup_commands():
             elif len(spec_params) > 0:
                 raise ValueError("{} parameters defined but not documented ~ {!r}".format(
                     func_info['name'], spec_params))
+            
+            # Check function source for explicit return.
+            function_returns = 'return' in _tokenise_source( getsource(function) )
+            
+            # If return value documented, validate it..
+            if 'Returns' in doc_info:
+                
+                if not function_returns:
+                    raise ValueError("{} return value documented but not defined".format(
+                        func_info['name']))
+                
+                if 'outfile' in func_info['params'] or '-o' in flag2param:
+                    raise ValueError("flag of {} return value conflicts with parameter {!r}".format(
+                        func_info['name'], flag2param[flag]))
+                
+                # Update parameter info with special return value option.
+                func_info['returns'] = {
+                    'default': '-',
+                    'description': doc_info['Returns']['description'],
+                    'dest': 'outfile',
+                    'flag': '-o',
+                    'group': 'short',
+                    'required': False,
+                    'type': doc_info['Returns']['type']
+                }
+                
+            # ..otherwise, check no return value defined.
+            elif function_returns:
+                raise ValueError("{} return value defined but not documented".format(
+                    func_info['name']))
             
             # Update command info.
             cmd_info[command][qualifier] = func_info
@@ -1347,12 +1398,12 @@ def gaction(argv=None):
     
     args = ap.parse_args(argv)
     
-    function, args = _proc_args(args)
+    function, args, outfile = _proc_args(args)
     
     result = function( **vars(args) )
     
     if result is not None:
-        _object_to_file(result, '-')
+        _object_to_file(result, outfile)
     
 
 def main():

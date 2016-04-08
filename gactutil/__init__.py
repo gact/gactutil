@@ -21,7 +21,8 @@ from sys import stdin
 from sys import stdout
 from tempfile import mkdtemp
 from tempfile import NamedTemporaryFile
-
+from tokenize import generate_tokens
+from tokenize import TokenError
 from yaml import dump
 from yaml import load
 from yaml import safe_dump
@@ -488,6 +489,15 @@ def _setup_about(setup_info):
     about_file = os.path.join(data_dir, 'about.yaml')
     with open(about_file, 'w') as fh:
         dump(about_info, fh, default_flow_style=False)
+
+def _tokenise_source(source):
+    """Tokenise source code into token strings."""
+    buf = io.BytesIO(source)
+    try:
+        token_strings = [ x[1] for x in generate_tokens(buf.readline) ]
+    except TokenError:
+        raise RuntimeError("failed to tokenise source")
+    return token_strings
 
 def _truncate_string(s, length=16):
     """Truncate a string to the given length."""
