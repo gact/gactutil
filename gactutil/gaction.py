@@ -38,7 +38,7 @@ from gactutil import TextWriter
 ################################################################################
 
 # Supported commands. 
-_commands = ('filter', 'index', 'prep', 'setrg')
+_commands = ('filter', 'get', 'index', 'prep', 'setrg')
 
 _info = {
     
@@ -506,7 +506,6 @@ def _object_to_file(x, f):
         _string_to_file(x, f)
     else:
         raise ValueError("failed to output object of unsupported type to file ~ {!r}".format(type(x).__name__))
-    return s
 
 def _object_to_string(x):
     """Convert object to string."""
