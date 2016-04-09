@@ -160,8 +160,6 @@ def _bool_to_file(x, f):
 
 def _bool_to_string(x):
     """Convert bool to string."""
-    if not isinstance(x, bool):
-        raise TypeError("object is not of type bool ~ {!r}".format(x))
     return 'true' if x else 'false'
 
 def _DataFrame_from_file(f):
@@ -197,10 +195,6 @@ def _DataFrame_from_string(s):
 
 def _DataFrame_to_file(x, f):
     """Output Pandas DataFrame to file."""
-    
-    if not isinstance(x, DataFrame):
-        raise TypeError("object is not a Pandas DataFrame ~ {!r}".format(x))
-    
     try:
         with TextWriter(f) as writer:
             x.to_csv(writer, sep=',', na_rep=_info['na_values'][0], index=False)
@@ -209,10 +203,6 @@ def _DataFrame_to_file(x, f):
 
 def _DataFrame_to_string(x):
     """Convert Pandas DataFrame to string."""
-    
-    if not isinstance(x, DataFrame):
-        raise TypeError("object is not a Pandas DataFrame ~ {!r}".format(x))
-    
     try:
         with BytesIO() as fh:
             x.to_csv(fh, sep=',', na_rep=_info['na_values'][0], index=False)
@@ -257,9 +247,6 @@ def _dict_from_string(s):
 
 def _dict_to_file(x, f):
     """Output dictionary to file."""
-    
-    _validate_gactfunc_builtin(x)
-    
     try:
         with TextWriter(f) as writer:
             safe_dump(x, writer, default_flow_style=False, width=sys.maxint)
@@ -269,11 +256,6 @@ def _dict_to_file(x, f):
 
 def _dict_to_string(x):
     """Convert dictionary to string."""
-    
-    if not isinstance(x, dict):
-        raise TypeError("object is not of dict type ~ {!r}".format(x))
-    
-    _validate_gactfunc_builtin(x)
     
     try:
         s = safe_dump(x, default_flow_style=True, width=sys.maxint)
@@ -293,8 +275,6 @@ def _float_from_file(f):
 
 def _float_to_file(x, f):
     """Output float to file."""
-    if not isinstance(x, float):
-        raise TypeError("object is not of float type ~ {!r}".format(x))
     s = str(x)
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
@@ -307,8 +287,6 @@ def _int_from_file(f):
 
 def _int_to_file(x, f):
     """Output integer to file."""
-    if not isinstance(x, int):
-        raise TypeError("object is not of integer type ~ {!r}".format(x))    
     s = str(x)
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
@@ -399,11 +377,6 @@ def _list_to_file(x, f):
 def _list_to_string(x):
     """Convert list to string."""
     
-    _validate_gactfunc_builtin(x)
-    
-    if not isinstance(x, list):
-        raise TypeError("object is not of list type ~ {!r}".format(x))
-    
     try:
         s = safe_dump(x, default_flow_style=True, width=sys.maxint)
         assert isinstance(s, basestring)
@@ -436,8 +409,6 @@ def _None_to_file(x, f):
 
 def _None_to_string(x):
     """Convert None to string."""
-    if x is not None:
-        raise TypeError("object is not None ~ {!r}".format(x))
     return 'null'
 
 def _object_from_file(f, object_type):
@@ -540,9 +511,6 @@ def _string_from_file(f):
 
 def _string_to_file(s, f):
     """Output string to file."""
-    if not isinstance(s, basestring):
-        raise TypeError("object is not of string type ~ {!r}".format(s))
-    _validate_gactfunc_builtin(s)
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
 
