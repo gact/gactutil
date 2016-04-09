@@ -1354,6 +1354,34 @@ def _validate_gactfunc_param_type(x):
     elif not isinstance(x, _info['param_types']):
         raise TypeError("gaction object is not of supported parameter type ~ {!r}".format(x))
 
+def _validate_gactfunc_return_type(x):
+    """Recursively validate gactfunc return value object."""
+    
+    if isinstance(x, basestring):
+    
+        if '\n' in x:
+            raise ValueError("gaction string contains newlines ~ {!r}".format(x))
+            
+    elif isinstance(x, dict):
+    
+        for key, value in x.items():
+            
+            try:
+                if '\n' in key:
+                    raise ValueError("gaction dict key contains newlines ~ {!r}".format(key))
+            except TypeError:
+                pass
+             
+            _validate_gactfunc_return_type(value)
+            
+    elif isinstance(x, list):
+    
+        for element in x:
+            _validate_gactfunc_return_type(element)
+    
+    elif not isinstance(x, _info['types']):
+        raise TypeError("gaction object is not of supported return value type ~ {!r}".format(x))
+
 ################################################################################
 
 def gaction(argv=None):
