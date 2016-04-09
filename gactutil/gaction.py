@@ -59,11 +59,11 @@ _info = {
         DataFrame
      ),
      
-    # Supported gactfunc builtin types. These must be suitable for use both as
+    # Supported gactfunc parameter types. These must be suitable for use both as
     # Python function arguments and as command-line arguments converted from a 
-    # simple string. Any builtin added here must be explicitly handled in the 
-    # function '_proc_args'.
-    'builtins': (
+    # simple string. Any parameter type added here must be explicitly handled in  
+    # the function '_proc_args'.
+    'param_types': (
         type(None),
         bool,
         float,
@@ -222,7 +222,7 @@ def _dict_from_file(f):
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
     
-    _validate_gactfunc_builtin(x)
+    _validate_gactfunc_param_type(x)
     
     return x
 
@@ -241,7 +241,7 @@ def _dict_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse dict from string ~ {!r}".format(s))
     
-    _validate_gactfunc_builtin(x)
+    _validate_gactfunc_param_type(x)
     
     return x
 
@@ -340,7 +340,7 @@ def _list_from_file(f):
         while len(x) > 0 and x[-1] is None:
             x.pop()
     
-    _validate_gactfunc_builtin(x)
+    _validate_gactfunc_param_type(x)
     
     return x
 
@@ -359,7 +359,7 @@ def _list_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse list from string ~ {!r}".format(s))
     
-    _validate_gactfunc_builtin(x)
+    _validate_gactfunc_param_type(x)
     
     return x
 
@@ -506,7 +506,7 @@ def _string_from_file(f):
     """Get string from file."""
     with TextReader(f) as fh:
         s = fh.read().rstrip()
-    _validate_gactfunc_builtin(s)
+    _validate_gactfunc_param_type(s)
     return s
 
 def _string_to_file(s, f):
@@ -889,9 +889,9 @@ def _prep_argparser():
                             
                     elif param_info['group'] == 'compound':
                         
-                        # If compound object parameter is a builtin, prepare
-                        # to read it from command line or load it from file..
-                        if param_info['type'] in _info['builtins']:
+                        # If compound object parameter is of a parameter type,
+                        # prepare to read from command line or load from file..
+                        if param_info['type'] in _info['param_types']:
                         
                             # Set info for pair of alternative parameters.
                             item_help = 'Set {} from string.'.format(param_info['type'].__name__)
@@ -1225,9 +1225,9 @@ def _setup_commands():
                         # Set compound parameter title.
                         param_info['title'] = '{} argument'.format( param_name.replace('_', '-') )
                         
-                        # If parameter is of builtin type, set flag for 
+                        # If parameter is of a parameter type, set flag for 
                         # it to be passed directly on the command line.
-                        if param_info['type'] in _info['builtins']:
+                        if param_info['type'] in _info['param_types']:
                             param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
                         
                         # Set file parameter name.
@@ -1326,8 +1326,8 @@ def _setup_commands():
     with open(cmd_file, 'w') as fh:
         dump(cmd_info, fh, default_flow_style=False)
 
-def _validate_gactfunc_builtin(x):
-    """Recursively validate gactfunc builtin object."""
+def _validate_gactfunc_param_type(x):
+    """Recursively validate gactfunc parameter object."""
     
     if isinstance(x, basestring):
     
@@ -1344,15 +1344,15 @@ def _validate_gactfunc_builtin(x):
             except TypeError:
                 pass
              
-            _validate_gactfunc_builtin(value)
+            _validate_gactfunc_param_type(value)
             
     elif isinstance(x, list):
     
         for element in x:
-            _validate_gactfunc_builtin(element)
+            _validate_gactfunc_param_type(element)
     
-    elif not isinstance(x, _info['builtins']):
-        raise TypeError("gaction object is not of supported builtin type ~ {!r}".format(x))
+    elif not isinstance(x, _info['param_types']):
+        raise TypeError("gaction object is not of supported parameter type ~ {!r}".format(x))
 
 ################################################################################
 
