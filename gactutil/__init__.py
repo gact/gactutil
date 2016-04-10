@@ -342,23 +342,25 @@ class TextReader(TextRW):
 class TextWriter(TextRW):
     """Text writer class."""
     
-    def __init__(self, filepath, compress_output=False):
+    def __init__(self, filepath):
         """Init text writer.
          
          If output `filepath` is set to `-`, the new object will write to 
          standard output. Otherwise, the specified filepath is opened for 
-         writing. Output is GZIP-compressed if `compress_output` is true, 
-         or if a `filepath` is specified that ends with the extension `.gz`.
+         writing. Output is GZIP-compressed if the specified filepath ends 
+         with the extension `.gz`.
         
         Args:
             filepath (str): Path of output file.
-            compress_output (bool): Compress output.
         """
         
         super(TextWriter, self).__init__()
         
         if not isinstance(filepath, basestring):
             raise TypeError("cannot open filepath of type {!r}".format(type(filepath).__name__))
+        
+        # Assume uncompressed output.
+        compress_output = False
         
         # If filepath indicates standard output, 
         # prepare to write to standard output..
