@@ -10,7 +10,7 @@ def get_fasta(infile):
     """Get FASTA headers.
     
     Args:
-        infile (str): Input FASTA file.
+        infile (string): Input FASTA file.
         
     Returns:
         list: FASTA headers.
@@ -23,10 +23,11 @@ def recode_fasta(infile, outfile, mapping):
     """Recode FASTA data.
     
     Args:
-        infile (str): Input FASTA file.
-        outfile (str): Output FASTA file.
+        infile (string): Input FASTA file.
+        outfile (string): Output FASTA file.
         mapping (dict): Mapping of old item names to new names.
     """
+    get_fasta(infile)
     pass
 
 ################################################################################

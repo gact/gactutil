@@ -86,8 +86,8 @@ def filter_vcf(infile, outfile, filters, no_short_circuit=False,
     """Filter VCF.
     
     Args:
-        infile (str): Input VCF file.
-        outfile (str): Output filtered VCF file.
+        infile (string): Input VCF file.
+        outfile (string): Output filtered VCF file.
         filters (list): Filter specifications.
         no_short_circuit (bool): Apply all filters to each site.
         no_filtered (bool): Output only sites passing all filters.

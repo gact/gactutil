@@ -25,7 +25,6 @@ from pydoc import locate
 import re
 import sys
 from textwrap import dedent
-
 from yaml import dump
 from yaml import safe_dump
 from yaml import safe_load
@@ -44,42 +43,51 @@ _commands = ('filter', 'get', 'index', 'prep', 'setrg')
 
 _info = {
     
-    # Supported command function object types. These must be suitable for use both as
-    # Python function arguments and as command-line arguments, whether loaded
-    # from a file or converted from a simple string. Any data type added here 
-    # must be explicitly handled in the function '_proc_args'.
-    'types': (
-        type(None),
-        bool,
-        float,
-        int,
-        str,
-        dict,
-        list,
-        DataFrame
-     ),
+    # Supported gactfunc object types. These must be suitable for use both as 
+    # Python function arguments and as command-line arguments, whether loaded 
+    # from a file or converted from a simple string. It must also be possible
+    # to convert an object of each type to a string, and vice versa.
+    'gactfunc_types': (
+        'NoneType',
+        'bool',
+        'float',
+        'int',
+        'string',
+        'dict',
+        'list',
+        'DataFrame'
+    ),
+    
+    # Ductile object types: convertible to a single-line string, and vice versa.
+    # Note that some types (e.g. string) can have values that violate this 
+    # constraint, and validation of these types must account for this.
+    'ductile_types': (
+        'NoneType',
+        'bool',
+        'float',
+        'int',
+        'string',
+        'dict',
+        'list'
+    ),
      
-    # Supported command function parameter types. These must be suitable for use both as
-    # Python function arguments and as command-line arguments converted from a 
-    # simple string. Any parameter type added here must be explicitly handled in  
-    # the function '_proc_args'.
-    'param_types': (
-        type(None),
-        bool,
-        float,
-        int,
-        str,
-        dict,
-        list
-     ),
-     
-     # Compound data types. It should be possible for these to be passed as a 
-     # filepath on the command-line, and the process of reading the object from 
-     # that file should be handled within the function '_proc_args'.
-    'compound': (
-        dict,
-        list,
-        DataFrame
+    # Compound data types. 
+    'compound_types': (
+        'dict',
+        'list',
+        'DataFrame'
+    ),
+    
+    # Delimitable types: convertible to a delimited string, and vice versa.
+    # The string can span multiple lines, 
+    'delimitable_types': (
+        'NoneType',
+        'bool',
+        'float',
+        'int',
+        'string',
+        'dict',
+        'list'
     ),
     
     # True values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
@@ -101,7 +109,6 @@ _info = {
                 'regex': re.compile('^infile$'),
                 'metavar': 'FILE',
                 'flag': '-i'
-                
             },
             
             'listed': {
@@ -181,7 +188,7 @@ _info = {
             'default': 1,
             'flag': '-t',
             'required': False,
-            'type': int
+            'type': 'int'
         }
     },
     
@@ -299,7 +306,7 @@ def _dict_from_file(f):
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
     
-    _validate_gactfunc_param_type(x)
+    _validate_param_type(x)
     
     return x
 
@@ -318,7 +325,7 @@ def _dict_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse dict from string ~ {!r}".format(s))
     
-    _validate_gactfunc_param_type(x)
+    _validate_param_type(x)
     
     return x
 
@@ -355,6 +362,28 @@ def _float_to_file(x, f):
     s = str(x)
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
+
+def _get_type_name(x):
+    """Get type name of object."""
+    if x is None:
+        type_name = 'NoneType'
+    elif isinstance(x, bool):
+        type_name = 'bool'
+    elif isinstance(x, float):
+        type_name = 'float'
+    elif isinstance(x, int):
+        type_name = 'int'
+    elif isinstance(x, basestring):
+        type_name = 'string'
+    elif isinstance(x, dict):
+        type_name = 'dict'
+    elif isinstance(x, list):
+        type_name = 'list'
+    elif isinstance(x, DataFrame):
+        type_name = 'DataFrame'
+    else:
+        raise TypeError("unknown object type ~ {!r}".format(type(x).__name__))
+    return type_name
 
 def _int_from_file(f):
     """Get integer from file."""
@@ -417,7 +446,7 @@ def _list_from_file(f):
         while len(x) > 0 and x[-1] is None:
             x.pop()
     
-    _validate_gactfunc_param_type(x)
+    _validate_param_type(x)
     
     return x
 
@@ -436,7 +465,7 @@ def _list_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse list from string ~ {!r}".format(s))
     
-    _validate_gactfunc_param_type(x)
+    _validate_param_type(x)
     
     return x
 
@@ -447,8 +476,8 @@ def _list_to_file(x, f):
         for element in x:
             try:
                 line = _object_to_string(element)
-                writer.write( '{}\n'.format(line) )
-            except (IOError, YAMLError):
+                writer.write( '{}\n'.format( line.rstrip('\n') ) )
+            except (IOError, ValueError):
                 raise ValueError("failed to output list to file ~ {!r}".format(x))
     
 def _list_to_string(x):
@@ -583,7 +612,7 @@ def _string_from_file(f):
     """Get string from file."""
     with TextReader(f) as fh:
         s = fh.read().rstrip()
-    _validate_gactfunc_param_type(s)
+    _validate_param_type(s)
     return s
 
 def _string_to_file(s, f):
@@ -719,7 +748,6 @@ def _parse_gactfunc_docstring(function):
                         if m is not None:
                             
                             param_name, type_name, param_desc = m.groups()
-                            type_value = locate(type_name)
                             
                             # Check parameter does not denote unenumerated arguments.
                             if param_name.startswith('*'):
@@ -737,7 +765,7 @@ def _parse_gactfunc_docstring(function):
                                     func_name, param_name))
                             
                             # Check parameter type is supported.
-                            if type_value not in _info['types']:
+                            if type_name not in _info['ductile_types']:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                     func_name, type_name, param_name))
                             
@@ -747,7 +775,7 @@ def _parse_gactfunc_docstring(function):
                                     func_name, param_name))
                             
                             param_info[param_name] = { 
-                                'type': type_value, 
+                                'type': type_name, 
                                 'description': param_desc
                             }
                         
@@ -784,7 +812,7 @@ def _parse_gactfunc_docstring(function):
                 
             elif h == 'Returns':
                 
-                type_value = None
+                type_name = None
                 description = list()
                 
                 # Process each line of return value section.
@@ -810,21 +838,19 @@ def _parse_gactfunc_docstring(function):
                                 raise ValueError("{} docstring must specify a type for return value".format(
                                     func_name))
                                 
-                            type_value = locate(type_name)
-                                
                             # Check type name is not 'None'.
                             if type_name == 'None':
                                 raise ValueError("{} docstring specifies 'None' for return value".format(
                                     func_name))
                                 
                             # Check return value type is supported.
-                            if type_value not in _info['types']:
+                            if type_name not in _info['gactfunc_types']:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
                                     func_name, type_name ))
                             
                         # ..otherwise if return value type already
                         # identified, append line to description..
-                        elif type_value is not None:
+                        elif type_name is not None:
                             
                             description.append(line)
                             
@@ -835,7 +861,7 @@ def _parse_gactfunc_docstring(function):
                 
                 # Set parsed return value info for docstring.
                 doc_info[h] = { 
-                    'type': type_value,
+                    'type': type_name,
                     'description': ' '.join(description)
                 }
                 
@@ -944,7 +970,7 @@ def _prep_argparser():
                     
                         apq.add_argument(param_info['flag'], 
                             dest     = param_info['dest'], 
-                            metavar  = param_info['type'].__name__.upper(),
+                            metavar  = param_info['type'].upper(),
                             default  = param_info['default'], 
                             required = param_info['required'], 
                             help     = param_info['description'])
@@ -968,11 +994,11 @@ def _prep_argparser():
                         
                         # If compound object parameter is of a parameter type,
                         # prepare to read from command line or load from file..
-                        if param_info['type'] in _info['param_types']:
+                        if param_info['type'] in _info['ductile_types']:
                         
                             # Set info for pair of alternative parameters.
-                            item_help = 'Set {} from string.'.format(param_info['type'].__name__)
-                            file_help = 'Load {} from file.'.format(param_info['type'].__name__)
+                            item_help = 'Set {} from string.'.format(param_info['type'])
+                            file_help = 'Load {} from file.'.format(param_info['type'])
                             
                             # Add (mutually exclusive) pair of alternative parameters.
                             ag = apq.add_argument_group(
@@ -1046,7 +1072,7 @@ def _proc_args(args):
         filebound = False
         
         # Get expected argument type.
-        param_type = param_info[param_name]['type']
+        type_name = param_info[param_name]['type']
         
         # Get argument value.
         try:
@@ -1076,9 +1102,9 @@ def _proc_args(args):
         # If argument specified, get from file or string.
         if arg is not None:
             if filebound:
-                args.__dict__[param_name] = _object_from_file(arg, param_type)
+                args.__dict__[param_name] = _object_from_file(arg, type_name)
             else:
-                args.__dict__[param_name] = _object_from_string(arg, param_type)
+                args.__dict__[param_name] = _object_from_string(arg, type_name)
     
     return function, args, retfile
 
@@ -1211,11 +1237,13 @@ def _setup_commands():
                             continue
                             
                         # Get parameter type.
-                        param_type = func_info['params'][param_name]['type']
+                        type_name = func_info['params'][param_name]['type']
                         
                         # Check that the defined default value is of the 
                         # type specified in the function documentation.
-                        if not isinstance(default, param_type):
+                        try:
+                            _validate_param_type(default, type_name)
+                        except (TypeError, ValueError):
                             raise TypeError("{} definition has default type mismatch for parameter {!r}".format(
                                 func_info['name'], param_name))
                         
@@ -1227,7 +1255,7 @@ def _setup_commands():
                         docstring_default = func_info['params'][param_name]['docstring-default']
                         
                         try: # Coerce documented default from string.
-                            coerced_default = _object_from_string(docstring_default, param_type)
+                            coerced_default = _object_from_string(docstring_default, type_name)
                         except (TypeError, ValueError):
                             raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
                                 func_info['name'], param_name))
@@ -1337,10 +1365,10 @@ def _setup_commands():
                                         iop_info[channel][param_name]['index'] = i
                                 
                                 # Check parameter type is as expected.
-                                param_type = func_info['params'][param_name]['type']
-                                if param_type != str:
-                                    raise TypeError("{} {} parameter must be of type {}, not {} ~ {!r}".format(
-                                        func_info['name'], channel, str.__name__, param_type.__name__, param_name))
+                                type_name = func_info['params'][param_name]['type']
+                                if type_name != 'string':
+                                    raise TypeError("{} {} parameter must be of type string, not {} ~ {!r}".format(
+                                        func_info['name'], channel, type_name, param_name))
                             
                             if iop == 'indexed':
                                 
@@ -1391,7 +1419,7 @@ def _setup_commands():
                         param_info['required'] = False
                         
                         # If default value is False, assign to switches..
-                        if param_info['type'] == bool and param_info['default'] is False:
+                        if param_info['type'] == 'bool' and param_info['default'] is False:
                             param_info['group'] = 'switch'
                         # ..otherwise assign to optionals.
                         else:
@@ -1437,9 +1465,9 @@ def _setup_commands():
                     elif param_name in _info['short_params']:
                         
                         # Check that this is not a compound type.
-                        if param_info['type'] in _info['compound']:
-                            raise TypeError("cannot create short-form parameter {!r} of type {!r}".format(
-                                param_name, param_info['type'].__name__))
+                        if param_info['type'] in _info['compound_types']:
+                            raise TypeError("cannot create short-form parameter {!r} of type {}".format(
+                                param_name, param_info['type']))
                         
                         # Set flag to short form.
                         param_info['flag'] = _info['short_params'][param_name]['flag']
@@ -1477,7 +1505,7 @@ def _setup_commands():
                     # ..otherwise if parameter is of a compound type, create
                     # two (mutually exclusive) parameters: one to accept argument
                     # as a string, the other to load it from a file..
-                    elif param_info['type'] in _info['compound']:
+                    elif param_info['type'] in _info['compound_types']:
                         
                         # Compound parameters are treated as optionals.
                         # If parameter was positional, set as required.
@@ -1493,7 +1521,7 @@ def _setup_commands():
                         
                         # If parameter is of a parameter type, set flag for 
                         # it to be passed directly on the command line.
-                        if param_info['type'] in _info['param_types']:
+                        if param_info['type'] in _info['ductile_types']:
                             param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
                         
                         # Set file parameter name.
@@ -1562,61 +1590,111 @@ def _setup_commands():
     with open(cmd_file, 'w') as fh:
         dump(cmd_info, fh, default_flow_style=False)
 
-def _validate_gactfunc_param_type(x):
-    """Recursively validate command function parameter object."""
-    
-    if isinstance(x, basestring):
-    
-        if '\n' in x:
-            raise ValueError("gaction string contains newlines ~ {!r}".format(x))
-            
-    elif isinstance(x, dict):
-    
-        for key, value in x.items():
-            
-            try:
-                if '\n' in key:
-                    raise ValueError("gaction dict key contains newlines ~ {!r}".format(key))
-            except TypeError:
-                pass
-             
-            _validate_gactfunc_param_type(value)
-            
-    elif isinstance(x, list):
-    
-        for element in x:
-            _validate_gactfunc_param_type(element)
-    
-    elif not isinstance(x, _info['param_types']):
-        raise TypeError("gaction object is not of supported parameter type ~ {!r}".format(x))
+################################################################################
 
-def _validate_gactfunc_return_type(x):
-    """Recursively validate command function return value object."""
+def _validate_delimitable_type(x):
+    """Validate delimitable object type."""
     
-    if isinstance(x, basestring):
+    object_type_name = _get_type_name(x)
     
-        if '\n' in x:
-            raise ValueError("gaction string contains newlines ~ {!r}".format(x))
-            
-    elif isinstance(x, dict):
-    
+    if object_type_name == 'string':
+        
+        _validate_ductile_type(x)
+        
+    elif object_type_name == 'dict':
+        
         for key, value in x.items():
-            
-            try:
-                if '\n' in key:
-                    raise ValueError("gaction dict key contains newlines ~ {!r}".format(key))
-            except TypeError:
-                pass
-             
-            _validate_gactfunc_return_type(value)
-            
-    elif isinstance(x, list):
-    
+            _validate_ductile_type(key)
+            _validate_ductile_type(value)
+        
+    elif object_type_name == 'list':
+        
         for element in x:
-            _validate_gactfunc_return_type(element)
+            _validate_ductile_type(element)
     
-    elif not isinstance(x, _info['types']):
-        raise TypeError("gaction object is not of supported return value type ~ {!r}".format(x))
+    elif object_type_name not in _info['delimitable_types']:
+        raise TypeError("{} is not delimitable ~ {!r}".format(object_type_name, x))
+
+def _validate_ductile_type(x):
+    """Validate ductile object type."""
+    
+    object_type_name = _get_type_name(x)
+    
+    if object_type_name == 'string':
+        
+        if '\n' in x:
+            raise ValueError("string is not ductile ~ {!r}".format(x))
+        
+    elif object_type_name == 'dict':
+        
+        for key, value in x.items():
+            _validate_ductile_type(key)
+            _validate_ductile_type(value)
+        
+    elif object_type_name == 'list':
+        
+        for element in x:
+            _validate_ductile_type(element)
+    
+    elif object_type_name not in _info['ductile_types']:
+        raise TypeError("{} is not ductile ~ {!r}".format(object_type_name, x))
+
+def _validate_param_type(x, type_name=None):
+    """Validate parameter object type."""
+    
+    object_type_name = _get_type_name(x)
+    
+    if type_name is not None and object_type_name != type_name:
+        raise TypeError("parameter type ({}) differs from that expected ({})".format(
+            object_type_name, type_name))
+    
+    if object_type_name == 'string':
+        _validate_ductile_type(x)
+        
+    elif object_type_name == 'dict':
+        
+        for key, value in x.items():
+            _validate_ductile_type(key)
+            _validate_ductile_type(value)
+        
+    elif object_type_name == 'list':
+        
+        for element in x:
+            _validate_ductile_type(element)
+        
+    elif object_type_name not in _info['ductile_types']:
+        raise TypeError("{} is not a valid parameter object ~ {!r}".format(object_type_name, x))
+    
+def _validate_return_type(x, type_name=None):
+    """Validate return value type."""
+    
+    object_type_name = _get_type_name(x)
+    
+    if type_name is not None and object_type_name != type_name:
+        raise TypeError("return value type ({}) differs from that expected ({})".format(
+            object_type_name, type_name))
+    
+    if object_type_name == 'string':
+        
+        _validate_ductile_type(x)
+        
+    elif object_type_name == 'dict':
+        
+        for key, value in x.items():
+            _validate_ductile_type(key)
+            _validate_ductile_type(value)
+        
+    elif object_type_name == 'list':
+        
+        try:
+            for element in x:
+                _validate_ductile_type(element)
+        except (TypeError, ValueError):
+            for element in x:
+                _validate_delimitable_type(element)
+    
+    elif object_type_name not in _info['gactfunc_types']:
+        raise TypeError("{} is not a valid return value object ~ {!r}".format(object_type_name, x))
 
 ################################################################################
 

@@ -422,7 +422,7 @@ def index_genome(path):
     the input directory and saves these to a genome index file in YAML format.
     
     Args:
-        path (str): Path to yeast genome data directory.
+        path (string): Path to yeast genome data directory.
     """
     gindex = GenomeIndex(path)
     gindex.dump(path)
@@ -461,8 +461,8 @@ def prep_genome(path, email=None):
     be converted to GFF3 format before input to this script.
     
     Args:
-        path (str): Path to yeast genome data directory.
-        email (str): Contact email for NCBI E-utilities.
+        path (string): Path to yeast genome data directory.
+        email (string): Contact email for NCBI E-utilities.
     """
     
     # PROCESS ... ##############################################################
