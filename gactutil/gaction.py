@@ -8,6 +8,7 @@ from argparse import FileType
 from argparse import RawDescriptionHelpFormatter
 from argparse import REMAINDER
 from collections import deque
+from collections import namedtuple
 from collections import OrderedDict
 from imp import load_source
 from importlib import import_module
@@ -41,54 +42,31 @@ from gactutil import TextWriter
 # Supported commands. 
 _commands = ('filter', 'get', 'index', 'prep', 'setrg')
 
+# Named tuple for specification of gactfunc parameter/return types.
+_GFTS = namedtuple('GFTS', [
+    'name',           # Name of gactfunc data type.
+    'is_compound',    # Composite data type.
+    'is_delimitable', # Convertible to a delimited string, and vice versa.
+    'is_ductile',     # Convertible to a single-line string, and vice versa.
+    'match'           # Function to match object to the given type spec.
+])
+
+# Supported gactfunc parameter/return types. These must be suitable for use both  
+# as Python function arguments and as command-line arguments, whether loaded 
+# from a file or converted from a simple string.
+_gtypes = OrderedDict([
+  #                          NAME   COMP  DELIM   DUCT  MATCH
+  ('NoneType',  _GFTS( 'NoneType', False,  True,  True, lambda x: x is None)),
+  ('bool',      _GFTS(     'bool', False,  True,  True, lambda x: isinstance(x, bool))),
+  ('float',     _GFTS(    'float', False,  True,  True, lambda x: isinstance(x, float))),
+  ('int',       _GFTS(      'int', False,  True,  True, lambda x: isinstance(x, int))),
+  ('string',    _GFTS(   'string', False,  True,  True, lambda x: isinstance(x, basestring))),
+  ('dict',      _GFTS(     'dict',  True,  True,  True, lambda x: isinstance(x, dict))),
+  ('list',      _GFTS(     'list',  True,  True,  True, lambda x: isinstance(x, list))),
+  ('DataFrame', _GFTS('DataFrame',  True, False, False, lambda x: isinstance(x, DataFrame)))
+])
+
 _info = {
-    
-    # Supported gactfunc object types. These must be suitable for use both as 
-    # Python function arguments and as command-line arguments, whether loaded 
-    # from a file or converted from a simple string. It must also be possible
-    # to convert an object of each type to a string, and vice versa.
-    'gactfunc_types': (
-        'NoneType',
-        'bool',
-        'float',
-        'int',
-        'string',
-        'dict',
-        'list',
-        'DataFrame'
-    ),
-    
-    # Ductile object types: convertible to a single-line string, and vice versa.
-    # Note that some types (e.g. string) can have values that violate this 
-    # constraint, and validation of these types must account for this.
-    'ductile_types': (
-        'NoneType',
-        'bool',
-        'float',
-        'int',
-        'string',
-        'dict',
-        'list'
-    ),
-     
-    # Compound data types. 
-    'compound_types': (
-        'dict',
-        'list',
-        'DataFrame'
-    ),
-    
-    # Delimitable types: convertible to a delimited string, and vice versa.
-    # The string can span multiple lines, 
-    'delimitable_types': (
-        'NoneType',
-        'bool',
-        'float',
-        'int',
-        'string',
-        'dict',
-        'list'
-    ),
     
     # True values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
     'true_values': ('yes', 'Yes', 'YES', 'true', 'True', 'TRUE', 'on', 'On', 'ON'),
@@ -365,25 +343,12 @@ def _float_to_file(x, f):
 
 def _get_type_name(x):
     """Get type name of object."""
-    if x is None:
-        type_name = 'NoneType'
-    elif isinstance(x, bool):
-        type_name = 'bool'
-    elif isinstance(x, float):
-        type_name = 'float'
-    elif isinstance(x, int):
-        type_name = 'int'
-    elif isinstance(x, basestring):
-        type_name = 'string'
-    elif isinstance(x, dict):
-        type_name = 'dict'
-    elif isinstance(x, list):
-        type_name = 'list'
-    elif isinstance(x, DataFrame):
-        type_name = 'DataFrame'
-    else:
-        raise TypeError("unknown object type ~ {!r}".format(type(x).__name__))
-    return type_name
+    
+    for t in _gtypes:
+        if _gtypes[t].match(x):
+            return t
+    
+    raise TypeError("unknown gactfunc parameter/return type ~ {!r}".format(type(x).__name__))
 
 def _int_from_file(f):
     """Get integer from file."""
@@ -765,7 +730,7 @@ def _parse_gactfunc_docstring(function):
                                     func_name, param_name))
                             
                             # Check parameter type is supported.
-                            if type_name not in _info['ductile_types']:
+                            if not _gtypes[type_name].is_ductile:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                     func_name, type_name, param_name))
                             
@@ -844,7 +809,7 @@ def _parse_gactfunc_docstring(function):
                                     func_name))
                                 
                             # Check return value type is supported.
-                            if type_name not in _info['gactfunc_types']:
+                            if type_name not in _gtypes:
                                 raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
                                     func_name, type_name ))
                             
@@ -994,7 +959,7 @@ def _prep_argparser():
                         
                         # If compound object parameter is of a parameter type,
                         # prepare to read from command line or load from file..
-                        if param_info['type'] in _info['ductile_types']:
+                        if _gtypes[ param_info['type'] ].is_ductile:
                         
                             # Set info for pair of alternative parameters.
                             item_help = 'Set {} from string.'.format(param_info['type'])
@@ -1465,7 +1430,7 @@ def _setup_commands():
                     elif param_name in _info['short_params']:
                         
                         # Check that this is not a compound type.
-                        if param_info['type'] in _info['compound_types']:
+                        if _gtypes[ param_info['type'] ].is_compound: 
                             raise TypeError("cannot create short-form parameter {!r} of type {}".format(
                                 param_name, param_info['type']))
                         
@@ -1505,7 +1470,7 @@ def _setup_commands():
                     # ..otherwise if parameter is of a compound type, create
                     # two (mutually exclusive) parameters: one to accept argument
                     # as a string, the other to load it from a file..
-                    elif param_info['type'] in _info['compound_types']:
+                    elif _gtypes[ param_info['type'] ].is_compound:
                         
                         # Compound parameters are treated as optionals.
                         # If parameter was positional, set as required.
@@ -1519,9 +1484,9 @@ def _setup_commands():
                         # Set compound parameter title.
                         param_info['title'] = '{} argument'.format( param_name.replace('_', '-') )
                         
-                        # If parameter is of a parameter type, set flag for 
+                        # If parameter is of a ductile type, set flag for 
                         # it to be passed directly on the command line.
-                        if param_info['type'] in _info['ductile_types']:
+                        if _gtypes[ param_info['type'] ].is_ductile:
                             param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
                         
                         # Set file parameter name.
@@ -1592,109 +1557,110 @@ def _setup_commands():
 
 ################################################################################
 
-def _validate_delimitable_type(x):
+def _validate_delimitable(x):
     """Validate delimitable object type."""
     
-    object_type_name = _get_type_name(x)
+    t = _get_type_name(x)
     
-    if object_type_name == 'string':
+    if t == 'string':
         
-        _validate_ductile_type(x)
+        _validate_ductile(x)
         
-    elif object_type_name == 'dict':
+    elif t == 'dict':
         
         for key, value in x.items():
-            _validate_ductile_type(key)
-            _validate_ductile_type(value)
+            _validate_ductile(key)
+            _validate_ductile(value)
         
-    elif object_type_name == 'list':
+    elif t == 'list':
         
         for element in x:
-            _validate_ductile_type(element)
+            _validate_ductile(element)
     
-    elif object_type_name not in _info['delimitable_types']:
-        raise TypeError("{} is not delimitable ~ {!r}".format(object_type_name, x))
+    elif not _gtypes[t].is_delimitable:
+        raise TypeError("{} is not delimitable ~ {!r}".format(t, x))
 
-def _validate_ductile_type(x):
+def _validate_ductile(x):
     """Validate ductile object type."""
     
-    object_type_name = _get_type_name(x)
+    t = _get_type_name(x)
     
-    if object_type_name == 'string':
+    if t == 'string':
         
         if '\n' in x:
             raise ValueError("string is not ductile ~ {!r}".format(x))
         
-    elif object_type_name == 'dict':
+    elif t == 'dict':
         
         for key, value in x.items():
-            _validate_ductile_type(key)
-            _validate_ductile_type(value)
+            _validate_ductile(key)
+            _validate_ductile(value)
         
-    elif object_type_name == 'list':
+    elif t == 'list':
         
         for element in x:
-            _validate_ductile_type(element)
+            _validate_ductile(element)
     
-    elif object_type_name not in _info['ductile_types']:
-        raise TypeError("{} is not ductile ~ {!r}".format(object_type_name, x))
+    elif not _gtypes[t].is_ductile:
+        raise TypeError("{} is not ductile ~ {!r}".format(t, x))
 
 def _validate_param_type(x, type_name=None):
     """Validate parameter object type."""
     
-    object_type_name = _get_type_name(x)
+    t = _get_type_name(x)
     
-    if type_name is not None and object_type_name != type_name:
+    if type_name is not None and t != type_name:
         raise TypeError("parameter type ({}) differs from that expected ({})".format(
-            object_type_name, type_name))
+            t, type_name))
     
-    if object_type_name == 'string':
-        _validate_ductile_type(x)
+    if t == 'string':
         
-    elif object_type_name == 'dict':
+        _validate_ductile(x)
+        
+    elif t == 'dict':
         
         for key, value in x.items():
-            _validate_ductile_type(key)
-            _validate_ductile_type(value)
+            _validate_ductile(key)
+            _validate_ductile(value)
         
-    elif object_type_name == 'list':
+    elif t == 'list':
         
         for element in x:
-            _validate_ductile_type(element)
+            _validate_ductile(element)
         
-    elif object_type_name not in _info['ductile_types']:
-        raise TypeError("{} is not a valid parameter object ~ {!r}".format(object_type_name, x))
+    elif not _gtypes[t].is_ductile:
+        raise TypeError("{} is not a valid parameter object ~ {!r}".format(t, x))
     
 def _validate_return_type(x, type_name=None):
     """Validate return value type."""
     
-    object_type_name = _get_type_name(x)
+    t = _get_type_name(x)
     
-    if type_name is not None and object_type_name != type_name:
+    if type_name is not None and t != type_name:
         raise TypeError("return value type ({}) differs from that expected ({})".format(
-            object_type_name, type_name))
+            t, type_name))
     
-    if object_type_name == 'string':
+    if t == 'string':
         
-        _validate_ductile_type(x)
+        _validate_ductile(x)
         
-    elif object_type_name == 'dict':
+    elif t == 'dict':
         
         for key, value in x.items():
-            _validate_ductile_type(key)
-            _validate_ductile_type(value)
+            _validate_ductile(key)
+            _validate_ductile(value)
         
-    elif object_type_name == 'list':
+    elif t == 'list':
         
         try:
             for element in x:
-                _validate_ductile_type(element)
+                _validate_ductile(element)
         except (TypeError, ValueError):
             for element in x:
-                _validate_delimitable_type(element)
+                _validate_delimitable(element)
     
-    elif object_type_name not in _info['gactfunc_types']:
-        raise TypeError("{} is not a valid return value object ~ {!r}".format(object_type_name, x))
+    elif t not in _gtypes:
+        raise TypeError("{} is not a valid return value object ~ {!r}".format(t, x))
 
 ################################################################################
 
