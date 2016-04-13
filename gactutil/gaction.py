@@ -26,6 +26,8 @@ from pydoc import locate
 import re
 import sys
 from textwrap import dedent
+from types import IntType
+from types import NoneType
 from yaml import dump
 from yaml import safe_dump
 from yaml import safe_load
@@ -56,10 +58,10 @@ _GFTS = namedtuple('GFTS', [
 # from a file or converted from a simple string.
 _gtypes = OrderedDict([
   #                          NAME   COMP  DELIM   DUCT  MATCH
-  ('NoneType',  _GFTS( 'NoneType', False,  True,  True, lambda x: x is None)),
+  ('NoneType',  _GFTS( 'NoneType', False,  True,  True, lambda x: isinstance(x, NoneType)),
   ('bool',      _GFTS(     'bool', False,  True,  True, lambda x: isinstance(x, bool))),
   ('float',     _GFTS(    'float', False,  True,  True, lambda x: isinstance(x, float))),
-  ('int',       _GFTS(      'int', False,  True,  True, lambda x: isinstance(x, int))),
+  ('int',       _GFTS(      'int', False,  True,  True, lambda x: isinstance(x, IntType))),
   ('string',    _GFTS(   'string', False,  True,  True, lambda x: isinstance(x, basestring))),
   ('dict',      _GFTS(     'dict',  True,  True,  True, lambda x: isinstance(x, dict))),
   ('list',      _GFTS(     'list',  True,  True,  True, lambda x: isinstance(x, list))),
