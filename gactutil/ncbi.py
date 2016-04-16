@@ -18,7 +18,7 @@ _info = {
     'faults': ('WarningList', 'ErrorList'),
     
     # Number of seconds to wait if NCBI server appears to be busy.
-    'polite-delay': 60.0
+    'polite_delay': 60.0
 }
 
 ################################################################################
@@ -49,7 +49,7 @@ def check_efetch(**kwargs):
             request = Entrez.efetch(**kwargs)
             result = Entrez.read(request)
         except (HTTPError, RuntimeError, SocketError, URLError):
-            sleep( _info('polite-delay') )
+            sleep( _info('polite_delay') )
         else:
             break
     
@@ -94,7 +94,7 @@ def check_esearch(**kwargs):
             request = Entrez.esearch(**kwargs)
             result = Entrez.read(request)
         except (HTTPError, RuntimeError, SocketError, URLError):
-            sleep( _info('polite-delay') )
+            sleep( _info('polite_delay') )
         else:
             break
     

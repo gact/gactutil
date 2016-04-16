@@ -36,7 +36,7 @@ from yaml import YAMLError
 _info = {
     
     # Data types that are considered valid as keys or valuse in a mapping object.
-    'mapping-types': (None, bool, int, float, str),
+    'mapping_types': (None, bool, int, float, str),
     
     # Config settings filename.
     'settings-file': 'settings.yaml'
@@ -511,7 +511,7 @@ def _validate_mapping(mapping):
     """Validate a mapping object."""
     for k in mapping:
         
-        if not isinstance(k, _info['mapping-types']):
+        if not isinstance(k, _info['mapping_types']):
             raise TypeError("mapping key {!r} has invalid type ~ {!r}".format(str(k), type(k).__name__))
         
         try:
@@ -519,7 +519,7 @@ def _validate_mapping(mapping):
         except KeyError:
             raise TypeError("mapping has invalid type ~ {!r}".format(type(mapping).__name__))
         
-        if not isinstance(x, _info['mapping-types']):
+        if not isinstance(x, _info['mapping_types']):
             raise TypeError("mapping value {!r} has invalid type ~ {!r}".format(str(x), type(x).__name__))
 
 def _write_setting(key, value):

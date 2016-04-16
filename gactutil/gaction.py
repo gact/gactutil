@@ -168,7 +168,7 @@ _info = {
     },
     
     # Gactfunc docstring headers.
-    'docstring-headers': {
+    'docstring_headers': {
         
         'known': ('Args', 'Arguments', 'Attributes', 'Example', 'Examples',
                   'Keyword Args', 'Keyword Arguments', 'Methods', 'Note',
@@ -179,16 +179,16 @@ _info = {
         'supported': ('Args', 'Arguments', 'Note', 'Notes', 'Parameters',
                       'Return', 'Returns', 'References', 'See Also'),
         
-        'alias-mapping': { 'Arguments': 'Args', 'Parameters': 'Args',
+        'alias_mapping': { 'Arguments': 'Args', 'Parameters': 'Args',
                            'Return': 'Returns' }
     },
     
     'regex': {
         'gactfunc': re.compile('^(?:[A-Z0-9]+)(?:_(?:[A-Z0-9]+))*$', re.IGNORECASE),
-        'docstring-header': re.compile('^(\w+):\s*$'),
-        'docstring-param': re.compile('^([*]{0,2}\w+)\s*(?:\((\w+)\))?:\s+(.+)$'),
-        'docstring-return': re.compile('^(?:(\w+):\s+)?(.+)$'),
-        'docstring-default': re.compile('[[(]default:\s+(.+?)\s*[])]', re.IGNORECASE)
+        'docstring_header': re.compile('^(\w+):\s*$'),
+        'docstring_param': re.compile('^([*]{0,2}\w+)\s*(?:\((\w+)\))?:\s+(.+)$'),
+        'docstring_return': re.compile('^(?:(\w+):\s+)?(.+)$'),
+        'docstring_default': re.compile('[[(]default:\s+(.+?)\s*[])]', re.IGNORECASE)
     }
 }
 
@@ -262,7 +262,7 @@ class _Gactfunc(object):
                 line = lines.popleft()
                 
                 # Try to match line to a docstring header.
-                m = _info['regex']['docstring-header'].match(line)
+                m = _info['regex']['docstring_header'].match(line)
                 
                 # If matches, set header of new section..
                 if m is not None:
@@ -271,15 +271,15 @@ class _Gactfunc(object):
                     h = m.group(1)
                     
                     # Map header to alias, if relevant.
-                    if h in _info['docstring-headers']['alias-mapping']:
-                        h = _info['docstring-headers']['alias-mapping'][h]
+                    if h in _info['docstring_headers']['alias_mapping']:
+                        h = _info['docstring_headers']['alias_mapping'][h]
                     
                     # Check header is known.
-                    if h not in _info['docstring-headers']['known']:
+                    if h not in _info['docstring_headers']['known']:
                         raise ValueError("unknown docstring header ~ {!r}".format(h))
                     
                     # Check header is supported.
-                    if h not in _info['docstring-headers']['supported']:
+                    if h not in _info['docstring_headers']['supported']:
                         raise ValueError("unsupported docstring header ~ {!r}".format(h))
                     
                     # Check for duplicate headers.
@@ -321,7 +321,7 @@ class _Gactfunc(object):
                         if line != '':
                             
                             # Try to match line to expected pattern of parameter.
-                            m = _info['regex']['docstring-param'].match(line)
+                            m = _info['regex']['docstring_param'].match(line)
                         
                             # If this is a parameter definition line, get parameter info..
                             if m is not None:
@@ -374,13 +374,13 @@ class _Gactfunc(object):
                     for param_name in param_info:
                         
                         # Try to match default definition pattern in parameter description.
-                        defaults = _info['regex']['docstring-default'].findall(
+                        defaults = _info['regex']['docstring_default'].findall(
                             param_info[param_name]['description'])
                         
                         # If a default definition matched, keep
                         # string representation of default value..
                         if len(defaults) == 1:
-                            param_info[param_name]['docstring-default'] = defaults[0]
+                            param_info[param_name]['docstring_default'] = defaults[0]
                         # ..otherwise the description has ambiguous default info.
                         elif len(defaults) > 1:
                             raise ValueError("{} docstring has multiple defaults for parameter {!r}".format(
@@ -403,7 +403,7 @@ class _Gactfunc(object):
                         if line != '':
                             
                             # Try to match line to expected pattern of return value.
-                            m = _info['regex']['docstring-return'].match(line)
+                            m = _info['regex']['docstring_return'].match(line)
                                 
                             # If return value type info is present,
                             # get type info and initial description..
@@ -633,11 +633,11 @@ class _Gactfunc(object):
                             func_name, param_name))
                     
                     # Skip undocumented defaults.
-                    if 'docstring-default' not in self.ap_spec['params'][param_name]:
+                    if 'docstring_default' not in self.ap_spec['params'][param_name]:
                         continue
                         
                     # Get string representation of docstring default.
-                    docstring_default = self.ap_spec['params'][param_name]['docstring-default']
+                    docstring_default = self.ap_spec['params'][param_name]['docstring_default']
                     
                     try: # Coerce documented default from string.
                         coerced_default = _object_from_string(docstring_default, type_name)
@@ -934,7 +934,7 @@ class _Gactfunc(object):
                 # Append info to argument description as appropriate.
                 if param_info['group'] != 'positional':
                     if param_info['default'] is not None:
-                        if param_info['group'] != 'switch' and not 'docstring-default' in param_info:
+                        if param_info['group'] != 'switch' and not 'docstring_default' in param_info:
                             param_info['description'] = '{} [default: {!r}]'.format(
                                 param_info['description'], param_info['default'])
                     elif param_info['required']:
@@ -942,7 +942,7 @@ class _Gactfunc(object):
                             param_info['description'])
                 
                 try: # Delete docstring default - no longer needed.
-                    del param_info['docstring-default']
+                    del param_info['docstring_default']
                 except KeyError:
                     pass
                 

@@ -30,7 +30,7 @@ _info = {
 
     # A normalised representations of yeast chromosomes. For the most part
     # these reflect the nomenclature in use by SGD as of March 2016.
-    'norm-chr': (
+    'norm_chr': (
       'chrI',
       'chrII',
       'chrIII',
@@ -81,7 +81,7 @@ _info = {
     },
     
     # GFF header appendix template for genome prep output GFF file.
-    'header-appendix': dedent('''\
+    'header_appendix': dedent('''\
     # Original file created by Saccharomyces Genome Database <www.yeastgenome.org>.
     # This version created at ${TIMEPOINT}. 
     # Modified from the original at GACT <www2.le.ac.uk/colleges/medbiopsych/research/gact>.
@@ -365,7 +365,7 @@ def _norm_chr(chromosome):
         
         # If putative chromosome is in the set of 
         # normalised chromosomes, set as normalised..
-        if chromosome in _info['norm-chr']:
+        if chromosome in _info['norm_chr']:
             result = chromosome
         
         # ..otherwise try to map to a normalised chromosome.
@@ -627,7 +627,7 @@ def prep_genome(path, email=None):
     timestamp = dt.strftime('%a %b %d %H:%M:%S %Y')
     
     # Set general GFF header appendix.
-    template = Template( _info['header-appendix'] )
+    template = Template( _info['header_appendix'] )
     additional_comments = template.substitute({ 'TIMEPOINT': timepoint, 
         'SCRIPT': 'GACTutil', 'CONTACT': email })
     header_comments = '\n'.join([header_comments, additional_comments])
