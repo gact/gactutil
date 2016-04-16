@@ -1054,7 +1054,7 @@ class _GactfuncCollection(object):
                 d[ function.commands[-1] ] = func_spec_info[function.__name__]
             except AssertionError:
                 raise RuntimeError("{} has conflicting gactfunc commands ~ {!r}".format(
-                    function.__name__, ' '.join(func.commands)))
+                    function.__name__, ' '.join(function.commands)))
     
     def prep_argparser(self):
         """Prep command-line argument parser."""
