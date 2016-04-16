@@ -58,7 +58,7 @@ _GFTS = namedtuple('GFTS', [
 # from a file or converted from a simple string.
 _gtypes = OrderedDict([
   #                          NAME   COMP  DELIM   DUCT  MATCH
-  ('NoneType',  _GFTS( 'NoneType', False,  True,  True, lambda x: isinstance(x, NoneType)),
+  ('NoneType',  _GFTS( 'NoneType', False,  True,  True, lambda x: isinstance(x, NoneType))),
   ('bool',      _GFTS(     'bool', False,  True,  True, lambda x: isinstance(x, bool))),
   ('float',     _GFTS(    'float', False,  True,  True, lambda x: isinstance(x, float))),
   ('int',       _GFTS(      'int', False,  True,  True, lambda x: isinstance(x, IntType))),
@@ -486,93 +486,89 @@ def _None_to_string(x):
 
 def _object_from_file(f, object_type):
     """Get object from file."""
-    if object_type is None:
+    if object_type == 'NoneType':
         x = _None_from_file(f)
-    elif object_type == bool:
+    elif object_type == 'bool':
         x = _bool_from_file(f)
-    elif object_type == float:
+    elif object_type == 'float':
         x = _float_from_file(f)
-    elif object_type == int:
+    elif object_type == 'int':
         x = _int_from_file(f)
-    elif object_type == dict:
+    elif object_type == 'dict':
         x = _dict_from_file(f)
-    elif object_type == list:
+    elif object_type == 'list':
         x = _list_from_file(f)
-    elif object_type == DataFrame:
+    elif object_type == 'DataFrame':
         x = _DataFrame_from_file(f)
-    elif isinstance(s, basestring):
+    elif object_type == 'string':
         x = _string_from_file(f)
-    elif object_type != str:
-        raise ValueError("failed to get unsupported type from file ~ {!r}".format(object_type.__name__))
     else:
-        raise TypeError("file not found ~ {!r}".format(f))
+        raise ValueError("failed to get unsupported type ({!r}) from file".format(object_type))
     return x
 
 def _object_from_string(s, object_type):
     """Get object from string."""
-    if object_type is None:
+    if object_type == 'NoneType':
         x = _None_from_string(s)
-    elif object_type == bool:
+    elif object_type == 'bool':
         x = _bool_from_string(s)
-    elif object_type == float:
+    elif object_type == 'float':
         x = float(s)
-    elif object_type == int:
+    elif object_type == 'int':
         x = int(s)
-    elif object_type == dict:
+    elif object_type == 'dict':
         x = _dict_from_string(s)
-    elif object_type == list:
+    elif object_type == 'list':
         x = _list_from_string(s)
-    elif object_type == DataFrame:
+    elif object_type == 'DataFrame':
         x = _DataFrame_from_string(s)
-    elif isinstance(s, basestring):
+    elif object_type == 'string':
         x = s
-    elif object_type != str:
-        raise ValueError("failed to get unsupported type from string ~ {!r}".format(object_type.__name__))
     else:
-        raise TypeError("object is not of type string ~ {!r}".format(s))
+        raise ValueError("failed to get unsupported type ({!r}) from string".format(object_type))
     return x
 
 def _object_to_file(x, f):
     """Output object to file."""
-    if x is None:
+    if _gtypes['NoneType'].match(x):
         _None_to_file(x, f)
-    elif isinstance(x, bool):
+    elif _gtypes['bool'].match(x):
         _bool_to_file(x, f)
-    elif isinstance(x, float):
+    elif _gtypes['float'].match(x):
         _float_to_file(x, f)
-    elif isinstance(x, int):
+    elif _gtypes['int'].match(x):
         _int_to_file(x, f)
-    elif isinstance(x, dict):
+    elif _gtypes['dict'].match(x):
         _dict_to_file(x, f)
-    elif isinstance(x, list):
+    elif _gtypes['list'].match(x):
         _list_to_file(x, f)
-    elif isinstance(x, DataFrame):
+    elif _gtypes['DataFrame'].match(x):
         _DataFrame_to_file(x, f)
-    elif isinstance(x, basestring):
+    elif _gtypes['string'].match(x):
         _string_to_file(x, f)
     else:
-        raise ValueError("failed to output object of unsupported type to file ~ {!r}".format(type(x).__name__))
+        raise ValueError("failed to output object of unsupported type ({!r}) to file".format(type(x).__name__))
 
 def _object_to_string(x):
     """Convert object to string."""
-    if x is None:
+    if _gtypes['NoneType'].match(x):
         s = _None_to_string(x)
-    elif isinstance(x, bool):
+    elif _gtypes['bool'].match(x):
         s = _bool_to_string(x)
-    elif isinstance(x, float):
+    elif _gtypes['float'].match(x):
         s = str(x)
-    elif isinstance(x, int):
+    elif _gtypes['int'].match(x):
         s = str(x)
-    elif isinstance(x, dict):
+    elif _gtypes['dict'].match(x):
         s = _dict_to_string(x)
-    elif isinstance(x, list):
+    elif _gtypes['list'].match(x):
         s = _list_to_string(x)
-    elif isinstance(x, DataFrame):
+    elif _gtypes['DataFrame'].match(x):
         s = _DataFrame_to_string(x)
-    elif isinstance(x, basestring):
+    elif _gtypes['string'].match(x):
         s = x
     else:
-        raise ValueError("failed to convert object of unsupported type to string ~ {!r}".format(type(x).__name__))
+        raise ValueError("failed to convert object of unsupported type ({!r}) to string".format(type(x).__name__))
     return s
 
 def _string_from_file(f):
