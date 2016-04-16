@@ -1056,11 +1056,6 @@ class _GactfuncCollection(object):
     def prep_argparser(self):
         """Prep command-line argument parser."""
         
-        # Validate caller.
-        caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
-        if os.path.basename(caller_file) != 'gaction.py' or caller_func != 'gaction':
-            raise RuntimeError("function {!r} should only be called by GACTutil function 'gaction'".format(stack()[0][3]))
-        
         # Set version string.
         prog = os.path.splitext( os.path.basename(__file__) )[0]
         about = _read_about()
@@ -1222,11 +1217,6 @@ class _GactfuncCollection(object):
     
     def proc_args(self, args):
         """Process parsed command-line arguments."""
-        
-        # Validate caller.
-        caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
-        if os.path.basename(caller_file) != 'gaction.py' or caller_func != 'gaction':
-            raise RuntimeError("function {!r} should only be called by GACTutil function 'gaction'".format(stack()[0][3]))
         
         # Pop return-value output file, if present.
         retfile = args.__dict__.pop('retfile', None)
