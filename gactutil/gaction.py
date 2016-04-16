@@ -21,13 +21,14 @@ from io import BytesIO
 import os
 from pandas import DataFrame
 from pandas import read_csv
-import pickle
 from pkg_resources import resource_filename
 import re
 import sys
 from textwrap import dedent
 from types import IntType
 from types import NoneType
+from yaml import dump
+from yaml import load
 from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
@@ -977,24 +978,24 @@ class _GactfuncCollection(object):
         self._data = dict()
         
     def dump(self):
-        """Dump pickled gactfunc collection info."""
+        """Dump gactfunc collection info."""
         
         # Ensure data directory exists.
         data_dir = os.path.join('gactutil', 'data')
         if not os.path.isdir(data_dir):
             os.makedirs(data_dir)
         
-        # Pickle gactfunc collection.
-        gaction_file = os.path.join(data_dir, 'gfi.p')
+        # Dump gactfunc collection info.
+        gaction_file = os.path.join(data_dir, 'gaction.yaml')
         with open(gaction_file, 'w') as fh:
-            pickle.dump(self._data, fh)
+            yaml.dump(self._data, fh)
         
     def load(self):
-        """Load pickled gactfunc collection info."""
-        gaction_file = os.path.join('data', 'gfi.p')
+        """Load gactfunc collection info."""
+        gaction_file = os.path.join('data', 'gaction.yaml')
         gaction_path = resource_filename('gactutil', gaction_file)
         with open(gaction_path, 'r') as fh:
-            self._data = pickle.load(fh)
+            self._data = yaml.load(fh)
     
     def populate(self):
         """Populate gactfunc collection from GACTutil package modules.
