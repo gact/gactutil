@@ -14,7 +14,7 @@ In addition to the Python standard library, this package depends on the followin
 
 ## Installation 
 
-To install this package, navigate to the package root and input the command:
+To install this package, navigate to the package root directory and input the command:
 
 ```
 python setup.py install
@@ -28,10 +28,10 @@ Selected functions can be run from the command line using the package entry
 point 'gaction' as follows:
 
 ```
-gaction <command> <qualifier> [-h] ...
+gaction <command> <modifier> [<modifier> ...] [-h] ...
 ```
 
-...where `<command>` is the main command, and `<qualifier>` modifies the command. 
+...where `<command>` is the main command, which is modified by one or more `<modifier>` subcommands.
 
 To see options for a command, use the help flag (`-h`).
 

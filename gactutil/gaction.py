@@ -1107,7 +1107,7 @@ class _GactfuncCollection(object):
                 
                 # If this node has subcommands, add a subparser..
                 if len(subcommands) > 0:
-                    csp = cap.add_subparsers(title='qualifiers')
+                    csp = cap.add_subparsers(title='modifiers')
                 # ..otherwise leave subparser unset.
                 else:
                     csp = None
