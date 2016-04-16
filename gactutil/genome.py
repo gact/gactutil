@@ -19,6 +19,7 @@ from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
 
+from gactutil.gaction import gactfunc
 from gactutil.ncbi import check_efetch
 from gactutil import TextReader
 from gactutil import TemporaryDirectory
@@ -414,6 +415,7 @@ def _load_genome_readme(filepath):
 
 ################################################################################
 
+@gactfunc
 def index_genome(path):
     """Index yeast genome data.
     
@@ -427,6 +429,7 @@ def index_genome(path):
     gindex = GenomeIndex(path)
     gindex.dump(path)
 
+@gactfunc
 def prep_genome(path, email=None):
     """Prep yeast genome data.
     

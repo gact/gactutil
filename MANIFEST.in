@@ -2,5 +2,6 @@
 
 recursive-include gactutil *.py
 recursive-include gactutil *.yaml
+recursive-include gactutil *.p
 
 ################################################################################

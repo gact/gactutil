@@ -5,7 +5,7 @@ from setuptools import find_packages
 from setuptools import setup
 
 from gactutil import _setup_about
-from gactutil.gaction import _setup_commands
+from gactutil.gaction import _GactfuncCollection
 
 setup_info = {
     'name': 'gactutil',
@@ -56,7 +56,10 @@ with open('README.md', 'r') as fh:
 
 _setup_about(setup_info)
 
-_setup_commands()
+# Setup gactfunc collection.
+gf = _GactfuncCollection()
+gf.populate()
+gf.dump()
 
 setup( **setup_info )
 

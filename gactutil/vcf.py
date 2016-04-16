@@ -4,7 +4,7 @@
 
 This module contains functions and utilities for handling data in VCF format.
 
-The VCF filter command function is a wrapper for the PyVCF filter script, and 
+The VCF filter gactfunc is a wrapper for the PyVCF filter script, and 
 the filter classes defined within this module are intended for use with that script.
 """
 
@@ -15,6 +15,8 @@ from subprocess import Popen
 import sys
 
 import vcf
+
+from gactutil.gaction import gactfunc
 
 ################################################################################
 
@@ -81,6 +83,7 @@ class SvOnly(CategoricalFilter):
 
 ################################################################################
 
+@gactfunc
 def filter_vcf(infile, outfile, filters, no_short_circuit=False, 
     no_filtered=False):
     """Filter VCF.

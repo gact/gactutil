@@ -5,7 +5,9 @@
 from Bio import SeqIO
 
 from gactutil import TextReader
+from gactutil.gaction import gactfunc
 
+@gactfunc
 def get_fasta(infile):
     """Get FASTA headers.
     

@@ -29,6 +29,8 @@ from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
 
+#from gactutil.gaction import gactfunc
+
 ################################################################################
 
 _info = {
@@ -402,14 +404,6 @@ def _read_about():
     with open(about_path, 'r') as fh:
         about_info = load(fh)
     return about_info
-
-def _read_command_info():
-    """Read package command info."""
-    cmd_file = os.path.join('data', 'gaction.yaml')
-    cmd_path = resource_filename('gactutil', cmd_file)
-    with open(cmd_path, 'r') as fh:
-        cmd_info = load(fh)
-    return cmd_info
 
 def _read_setting(key):
     """Read a single package setting."""

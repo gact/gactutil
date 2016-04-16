@@ -14,7 +14,6 @@ from imp import load_source
 from importlib import import_module
 from inspect import getargspec
 from inspect import getmembers
-from inspect import getmodule
 from inspect import getsource
 from inspect import isfunction
 from inspect import stack
@@ -22,27 +21,23 @@ from io import BytesIO
 import os
 from pandas import DataFrame
 from pandas import read_csv
-from pydoc import locate
+import pickle
+from pkg_resources import resource_filename
 import re
 import sys
 from textwrap import dedent
 from types import IntType
 from types import NoneType
-from yaml import dump
 from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
 
 from gactutil import _read_about
-from gactutil import _read_command_info
 from gactutil import _tokenise_source
 from gactutil import TextReader
 from gactutil import TextWriter
 
 ################################################################################
-
-# Supported commands. 
-_commands = ('filter', 'get', 'index', 'prep', 'setrg')
 
 # Named tuple for specification of gactfunc parameter/return types.
 _GFTS = namedtuple('GFTS', [
@@ -53,8 +48,8 @@ _GFTS = namedtuple('GFTS', [
     'match'           # Function to match object to the given type spec.
 ])
 
-# Supported gactfunc parameter/return types. These must be suitable for use both  
-# as Python function arguments and as command-line arguments, whether loaded 
+# Supported gactfunc parameter/return types. These must be suitable for use both
+# as Python function arguments and as command-line arguments, whether loaded
 # from a file or converted from a simple string.
 _gtypes = OrderedDict([
   #                          NAME   COMP  DELIM   DUCT  MATCH
@@ -157,10 +152,10 @@ _info = {
         }
     },
     
-    # Short-form parameters: mappings of Python function parameters to 
-    # short-form command-line flags. These make it possible for common 
-    # parameters to take a short form on the command line. If a command function 
-    # uses a short-form parameter, this is automatically converted to 
+    # Short-form parameters: mappings of Python function parameters to
+    # short-form command-line flags. These make it possible for common
+    # parameters to take a short form on the command line. If a gactfunc
+    # uses a short-form parameter, this is automatically converted to
     # the corresponding flag by '_setup_commands'.
     'short_params': {
         
@@ -172,30 +167,1182 @@ _info = {
         }
     },
     
-    # Command function docstring headers.
+    # Gactfunc docstring headers.
     'docstring-headers': {
         
         'known': ('Args', 'Arguments', 'Attributes', 'Example', 'Examples',
-                  'Keyword Args', 'Keyword Arguments', 'Methods', 'Note', 
-                  'Notes', 'Other Parameters', 'Parameters', 'Return', 
-                  'Returns', 'Raises', 'References', 'See Also', 'Warning', 
+                  'Keyword Args', 'Keyword Arguments', 'Methods', 'Note',
+                  'Notes', 'Other Parameters', 'Parameters', 'Return',
+                  'Returns', 'Raises', 'References', 'See Also', 'Warning',
                   'Warnings', 'Warns', 'Yield', 'Yields'),
             
-        'supported': ('Args', 'Arguments', 'Note', 'Notes', 'Parameters', 
+        'supported': ('Args', 'Arguments', 'Note', 'Notes', 'Parameters',
                       'Return', 'Returns', 'References', 'See Also'),
         
-        'alias-mapping': { 'Arguments': 'Args', 'Parameters': 'Args', 
+        'alias-mapping': { 'Arguments': 'Args', 'Parameters': 'Args',
                            'Return': 'Returns' }
     },
     
     'regex': {
-        'command-function': re.compile( '^({})_(\w+)$'.format('|'.join(_commands))),
+        'gactfunc': re.compile('^(?:[A-Z0-9]+)(?:_(?:[A-Z0-9]+))*$', re.IGNORECASE),
         'docstring-header': re.compile('^(\w+):\s*$'),
         'docstring-param': re.compile('^([*]{0,2}\w+)\s*(?:\((\w+)\))?:\s+(.+)$'),
         'docstring-return': re.compile('^(?:(\w+):\s+)?(.+)$'),
         'docstring-default': re.compile('[[(]default:\s+(.+?)\s*[])]', re.IGNORECASE)
     }
 }
+
+################################################################################
+
+class _Gactfunc(object):
+    """A gactfunc wrapper class."""
+    
+    @staticmethod
+    def _parse_gactfunc_docstring(function):
+        """Parse gactfunc docstring.
+        
+        This function parses a gactfunc docstring and returns an ordered
+        dictionary mapping headers to documentation. A gactfunc docstring
+        must be in Google-style format. The keys of the returned dictionary
+        will correspond to the docstring headers (e.g. 'Args'), in addition
+        to two special headers: 'Summary', which will contain the docstring
+        summary line; and 'Description', which will contain the docstring
+        description, if present.
+        """
+        
+        # Get function name.
+        func_name = function.__name__
+        
+        # Check gactfunc is indeed a function.
+        if not isfunction(function):
+            return TypeError("object is not a function ~ {!r}".format(func_name))
+        
+        # Get function docstring.
+        docstring = function.__doc__
+        
+        # Set default parsed docstring.
+        doc_info = None
+        
+        # Parse docstring if present.
+        if docstring is not None and docstring.strip() != '':
+            
+            # Init raw docstring.
+            raw_info = OrderedDict()
+            
+            # Split docstring into lines.
+            lines = deque( docstring.split('\n'))
+            
+            # Set summary from first non-blank line.
+            line = lines.popleft().strip()
+            if line == '':
+                line = lines.popleft().strip()
+                if line == '':
+                    raise ValueError("{} docstring summary is a blank line".format(func_name))
+            raw_info['Summary'] = [line]
+            
+            # Check summary followed by a blank line.
+            if len(lines) > 0:
+                line = lines.popleft().strip()
+                if line != '':
+                    raise ValueError("{} docstring summary is not followed by a blank line".format(func_name))
+            
+            # Get list of remaining lines, with common indentation removed.
+            lines = deque( (dedent( '\n'.join(lines) ) ).split('\n') )
+            
+            # Init docstring description.
+            raw_info['Description'] = list()
+            
+            # Docstring description includes everything before the first header.
+            h = 'Description'
+            
+            # Group content by docstring section.
+            while len(lines) > 0:
+                
+                # Get first of remaining lines.
+                line = lines.popleft()
+                
+                # Try to match line to a docstring header.
+                m = _info['regex']['docstring-header'].match(line)
+                
+                # If matches, set header of new section..
+                if m is not None:
+                    
+                    # Set current header.
+                    h = m.group(1)
+                    
+                    # Map header to alias, if relevant.
+                    if h in _info['docstring-headers']['alias-mapping']:
+                        h = _info['docstring-headers']['alias-mapping'][h]
+                    
+                    # Check header is known.
+                    if h not in _info['docstring-headers']['known']:
+                        raise ValueError("unknown docstring header ~ {!r}".format(h))
+                    
+                    # Check header is supported.
+                    if h not in _info['docstring-headers']['supported']:
+                        raise ValueError("unsupported docstring header ~ {!r}".format(h))
+                    
+                    # Check for duplicate headers.
+                    if h in raw_info:
+                        raise ValueError("duplicate docstring header ~ {!r}".format(h))
+                    
+                    raw_info[h] = list()
+                    
+                # ..otherwise append line to current section.
+                else:
+                    raw_info[h].append(line)
+            
+            # Remove docstring description, if empty.
+            if len(raw_info['Description']) == 0:
+                del raw_info['Description']
+            
+            # Init parsed docstring.
+            doc_info = OrderedDict()
+            
+            # Process each docstring section.
+            for h in raw_info:
+                
+                # Get docstring section as unindented lines.
+                raw_info[h] = ( dedent( '\n'.join(raw_info[h]) ) ).split('\n')
+                
+                if h == 'Args':
+                    
+                    # Init parsed parameter info.
+                    param_info = OrderedDict()
+                    
+                    param_name = None
+                    
+                    # Group content by parameter.
+                    for line in raw_info[h]:
+                        
+                        line = line.strip()
+                        
+                        # Skip blank lines.
+                        if line != '':
+                            
+                            # Try to match line to expected pattern of parameter.
+                            m = _info['regex']['docstring-param'].match(line)
+                        
+                            # If this is a parameter definition line, get parameter info..
+                            if m is not None:
+                                
+                                param_name, type_name, param_desc = m.groups()
+                                
+                                # Check parameter does not denote unenumerated arguments.
+                                if param_name.startswith('*'):
+                                    raise RuntimeError("{} docstring must not specify unenumerated arguments".format(
+                                        func_name))
+                                
+                                # Check parameter type specified.
+                                if type_name is None:
+                                    raise ValueError("{} docstring must specify a type for parameter {!r}".format(
+                                        func_name, param_name))
+                                
+                                # Check type name is not 'None'.
+                                if type_name == 'None':
+                                    raise ValueError("{} docstring specifies 'NoneType' for parameter {!r}".format(
+                                        func_name, param_name))
+                                
+                                # Check parameter type is supported.
+                                if not _gtypes[type_name].is_ductile:
+                                    raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
+                                        func_name, type_name, param_name))
+                                
+                                # Check for duplicate parameters.
+                                if param_name in param_info:
+                                    raise ValueError("{} docstring contains duplicate parameter ~ {!r}".format(
+                                        func_name, param_name))
+                                
+                                param_info[param_name] = {
+                                    'type': type_name,
+                                    'description': param_desc
+                                }
+                            
+                            # ..otherwise if parameter defined, treat this as
+                            # a continuation of the parameter description..
+                            elif param_name is not None:
+                                
+                                param_info[param_name]['description'] = '{} {}'.format(
+                                    param_info[param_name]['description'], line)
+                                    
+                            # ..otherwise this is not a valid docstring parameter.
+                            else:
+                                raise ValueError("failed to parse docstring for function ~ {!r}".format(
+                                    func_name))
+                    
+                    # Validate docstring default info.
+                    for param_name in param_info:
+                        
+                        # Try to match default definition pattern in parameter description.
+                        defaults = _info['regex']['docstring-default'].findall(
+                            param_info[param_name]['description'])
+                        
+                        # If a default definition matched, keep
+                        # string representation of default value..
+                        if len(defaults) == 1:
+                            param_info[param_name]['docstring-default'] = defaults[0]
+                        # ..otherwise the description has ambiguous default info.
+                        elif len(defaults) > 1:
+                            raise ValueError("{} docstring has multiple defaults for parameter {!r}".format(
+                                func_name, param_name))
+                    
+                    # Set parsed parameter info for docstring.
+                    doc_info[h] = param_info
+                    
+                elif h == 'Returns':
+                    
+                    type_name = None
+                    description = list()
+                    
+                    # Process each line of return value section.
+                    for line in raw_info[h]:
+                        
+                        line = line.strip()
+                        
+                        # Skip blank lines.
+                        if line != '':
+                            
+                            # Try to match line to expected pattern of return value.
+                            m = _info['regex']['docstring-return'].match(line)
+                                
+                            # If return value type info is present,
+                            # get type info and initial description..
+                            if m is not None:
+                                    
+                                type_name = m.group(1)
+                                description.append( m.group(2) )
+                                    
+                                # Check parameter type specified.
+                                if type_name is None:
+                                    raise ValueError("{} docstring must specify a type for return value".format(
+                                        func_name))
+                                    
+                                # Check type name is not 'None'.
+                                if type_name == 'None':
+                                    raise ValueError("{} docstring specifies 'None' for return value".format(
+                                        func_name))
+                                    
+                                # Check return value type is supported.
+                                if type_name not in _gtypes:
+                                    raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
+                                        func_name, type_name ))
+                                
+                            # ..otherwise if return value type already
+                            # identified, append line to description..
+                            elif type_name is not None:
+                                
+                                description.append(line)
+                                
+                            # ..otherwise this is not a valid docstring return value.
+                            else:
+                                raise ValueError("failed to parse docstring for function ~ {!r}".format(
+                                    func_name))
+                    
+                    # Set parsed return value info for docstring.
+                    doc_info[h] = {
+                        'type': type_name,
+                        'description': ' '.join(description)
+                    }
+                    
+                else:
+                    
+                    # Strip leading/trailing blank lines.
+                    lines = raw_info[h]
+                    for i in (0, -1):
+                        while len(lines) > 0 and lines[i].strip() == '':
+                            lines.pop(i)
+                    doc_info[h] = '\n'.join(lines)
+           
+        return doc_info
+    
+    @staticmethod
+    def _parse_gactfunc_name(function):
+        """Parse gactfunc name."""
+        
+        # Get function name.
+        func_name = function.__name__
+        
+        # Check gactfunc is indeed a function.
+        if not isfunction(function):
+            return TypeError("object is not a function ~ {!r}".format(func_name))
+        
+        # Try to match function name to expected gactfunc pattern.
+        m = _info['regex']['gactfunc'].match(func_name)
+        
+        try: # Split gactfunc name into commands.
+            assert m is not None
+            commands = tuple( func_name.split('_') )
+            assert len(commands) >= 2
+            assert len(set(commands)) == len(commands)
+        except AssertionError:
+            raise ValueError("function {!r} does not follow gactfunc naming convention".format(func_name))
+        
+        return commands
+    
+    @staticmethod
+    def _validate_param_type(x, type_name=None):
+        """Validate parameter object type."""
+        
+        t = _get_type_name(x)
+        
+        if type_name is not None and t != type_name:
+            raise TypeError("parameter type ({}) differs from that expected ({})".format(
+                t, type_name))
+        
+        if t == 'string':
+            
+            _validate_ductile(x)
+            
+        elif t == 'dict':
+            
+            for key, value in x.items():
+                _validate_ductile(key)
+                _validate_ductile(value)
+            
+        elif t == 'list':
+            
+            for element in x:
+                _validate_ductile(element)
+            
+        elif not _gtypes[t].is_ductile:
+            raise TypeError("{} is not a valid parameter object ~ {!r}".format(t, x))
+    
+    @staticmethod
+    def _validate_return_type(x, type_name=None):
+        """Validate return value type."""
+        
+        t = _get_type_name(x)
+        
+        if type_name is not None and t != type_name:
+            raise TypeError("return value type ({}) differs from that expected ({})".format(
+                t, type_name))
+        
+        if t == 'string':
+            
+            _validate_ductile(x)
+            
+        elif t == 'dict':
+            
+            for key, value in x.items():
+                _validate_ductile(key)
+                _validate_ductile(value)
+            
+        elif t == 'list':
+            
+            try:
+                for element in x:
+                    _validate_ductile(element)
+            except (TypeError, ValueError):
+                for element in x:
+                    _validate_delimitable(element)
+        
+        elif t not in _gtypes:
+            raise TypeError("{} is not a valid return value object ~ {!r}".format(t, x))
+    
+    def __init__(self, function):
+        """Init gactfunc wrapper from wrapped function."""
+        
+        # Get function name.
+        func_name = function.__name__
+        
+        # Init argparser spec.
+        self.ap_spec = OrderedDict()
+        
+        # Get commands from function name.
+        self.commands = self._parse_gactfunc_name(function)
+        
+        # Get function parameter spec.
+        param_spec = getargspec(function)
+        
+        # Check that there are no unenumerated arguments.
+        if param_spec.varargs is not None or param_spec.keywords is not None:
+            raise ValueError("{} cannot have unenumerated arguments".format(
+                self.__class__.__name__))
+        
+        # Get enumerated parameter names.
+        param_names = param_spec.args
+        
+        # Map formal keyword parameters to their defaults.
+        if param_spec.defaults is not None:
+            i = len(param_spec.defaults)
+            spec_def_info = { k: x for k, x in
+                zip(param_names[-i:], param_spec.defaults) }
+        else:
+            spec_def_info = None
+        
+        # Set docstring info from gactfunc docstring.
+        doc_info = self._parse_gactfunc_docstring(function)
+        
+        # Check that gactfunc has been documented.
+        if doc_info is None:
+            raise ValueError("{} {!r} is not documented".format(
+                self.__class__.__name__, func_name))
+        
+        self.ap_spec['summary'] = doc_info['Summary']
+        
+        if 'Description' in doc_info:
+            self.ap_spec['description'] = doc_info['Description']
+        
+        # Init flag set to check for conflicting option strings.
+        flag2param = dict()
+        
+        # If parameters documented, validate them..
+        if 'Args' in doc_info:
+            
+            # Set gactfunc parameter info from parsed docstring.
+            self.ap_spec['params'] = doc_info['Args']
+            
+            # Get set of documented parameters.
+            doc_param_set = set(self.ap_spec['params'])
+            
+            # Get set of parameters specified in function definition.
+            spec_param_set = set(param_names)
+            
+            # Check for parameters in docstring but not in function definition.
+            undef_params = list(doc_param_set - spec_param_set)
+            if len(undef_params) > 0:
+                raise ValueError("{} {!r} parameters documented but not defined ~ {!r}".format(
+                    self.__class__.__name__, func_name, undef_params))
+                    
+            # Check for parameters in function definition but not in docstring.
+            undoc_params = list(spec_param_set - doc_param_set)
+            if len(undoc_params) > 0:
+                raise ValueError("{} {!r} parameters defined but not documented ~ {!r}".format(
+                    self.__class__.__name__, func_name, undoc_params))
+        
+            # Validate any formal keyword parameters.
+            if spec_def_info is not None:
+                
+                for param_name, default in spec_def_info.items():
+                    
+                    self.ap_spec['params'][param_name]['default'] = default
+                    
+                    # Skip unspecified defaults as we cannot validate them.
+                    if default is None:
+                        continue
+                        
+                    # Get parameter type.
+                    type_name = self.ap_spec['params'][param_name]['type']
+                    
+                    # Check that the defined default value is of the
+                    # type specified in the function documentation.
+                    try:
+                        _Gactfunc._validate_param_type(default, type_name)
+                    except (TypeError, ValueError):
+                        raise TypeError("{} definition has default type mismatch for parameter {!r}".format(
+                            func_name, param_name))
+                    
+                    # Skip undocumented defaults.
+                    if 'docstring-default' not in self.ap_spec['params'][param_name]:
+                        continue
+                        
+                    # Get string representation of docstring default.
+                    docstring_default = self.ap_spec['params'][param_name]['docstring-default']
+                    
+                    try: # Coerce documented default from string.
+                        coerced_default = _object_from_string(docstring_default, type_name)
+                    except (TypeError, ValueError):
+                        raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
+                            func_name, param_name))
+                        
+                    # Check that documented default matches actual default.
+                    if coerced_default != default:
+                        raise ValueError("{} has default value mismatch for parameter {!r}".format(
+                            func_name, param_name))
+            
+            # Init input/output parameter set info.
+            self.ap_spec['iop'] = { k: None for k in _info['iop'] }
+            iop_info = { k: {} for k in _info['iop'] }
+            param2channel = dict()
+            param2iop = dict()
+            
+            # Get info on gactfunc input/output (IO) patterns.
+            for channel in _info['iop']:
+                
+                # Check for each IO pattern, store info on matching pattern.
+                for iop in _info['iop'][channel]:
+                    
+                    # Get info on this IO pattern.
+                    regex, metavar, flag = [ _info['iop'][channel][iop][k]
+                        for k in ('regex', 'metavar', 'flag') ]
+                    
+                    # If return-value IO pattern, check function for explicit return..
+                    if iop == 'returned':
+                        
+                        # Set special parameter name for return value.
+                        param_name = 'retfile'
+                        
+                        # Check if function contains explicit return.
+                        explicit_return = any( token == 'return' for token in
+                            reversed( _tokenise_source( getsource(function) ) ) )
+                        
+                        # If no explicit return in gactfunc source, check return
+                        # value not documented, then skip to next parameter set.
+                        if not explicit_return:
+                            if 'Returns' in doc_info:
+                                raise ValueError("{} return value documented but not defined".format(
+                                    func_name))
+                            continue
+                    
+                    # ..otherwise check parameter names.
+                    else:
+                        
+                        # Try to match parameter names to those expected for this parameter set.
+                        matches = [ regex.match(param_name) for param_name in param_names ]
+                        
+                        # Get mapping of params to matches for this parameter set.
+                        param2match = { p: m for p, m in zip(param_names, matches)
+                            if m is not None }
+                        
+                        # If no parameters matched, skip to next parameter set.
+                        if len(param2match) == 0:
+                            continue
+                        
+                    # Whether function parameter or return value, store
+                    # matching parameter set, checking for any conflicts.
+                    if self.ap_spec['iop'][channel] is not None:
+                        raise ValueError("{} has conflicting {} parameter sets ~ {!r}".format(
+                            func_name, channel, (self.ap_spec['iop'][channel], iop)))
+                    self.ap_spec['iop'][channel] = iop
+                    
+                    if iop == 'returned':
+                        
+                        # Check return value documented.
+                        if not 'Returns' in doc_info:
+                            raise ValueError("{} return value defined but not documented".format(
+                                func_name))
+                        
+                        # Check for conflicting function parameter.
+                        if param_name in self.ap_spec['params']:
+                            raise ValueError("{} return value command-line parameter conflicts with function parameter {!r}".format(
+                                func_name, param_name))
+                        
+                        # Store parameter info for return value parameter.
+                        iop_info[channel][param_name] = {
+                            'metavar': metavar,
+                            'flag': flag
+                        }
+                        
+                        # Update parameter info with special return value option.
+                        self.ap_spec['params'][param_name] = {
+                            'default': '-',
+                            'description': doc_info['Returns']['description'],
+                            'type': doc_info['Returns']['type']
+                        }
+                        
+                    else:
+                        
+                        # Store parameter info for each parameter in this set.
+                        for param_name in param2match:
+                            
+                            iop_info[channel][param_name] = {
+                                'metavar': regex.sub(metavar, param_name),
+                                'flag': regex.sub(flag, param_name)
+                            }
+                            
+                            # If these are indexed input/output files, get
+                            # parameter index, as an integer if possible.
+                            if iop == 'indexed':
+                                i = param2match[param_name].group('index')
+                                try:
+                                    iop_info[channel][param_name]['index'] = int(i)
+                                except ValueError:
+                                    iop_info[channel][param_name]['index'] = i
+                            
+                            # Check parameter type is as expected.
+                            type_name = self.ap_spec['params'][param_name]['type']
+                            if type_name != 'string':
+                                raise TypeError("{} {} parameter must be of type string, not {} ~ {!r}".format(
+                                    func_name, channel, type_name, param_name))
+                        
+                        if iop == 'indexed':
+                            
+                            # Check indexed parameters are as expected:
+                            # * numbered indices start at 1, increment by 1
+                            # * unindexed parameter not present without indexed parameters
+                            indices = [ iop_info[channel][p]['index'] for p in iop_info[channel] ]
+                            numbers = sorted( i for i in indices if i != 'U' )
+                            if numbers[0] != 1 or any( j - i != 1
+                                for i, j in zip(numbers[:-1], numbers[1:]) ):
+                                raise ValueError("sparse indices in {} parameters of {}".format(
+                                    channel, func_name))
+                            if 'U' in indices and len(indices) == 1:
+                                raise ValueError("{} defines unindexed {1} parameter but not indexed {1} parameters".format(
+                                    func_name, channel))
+                            
+                            # Check required indexed parameters are as expected:
+                            # * numbered indices start at 1, increment by 1
+                            # * unindexed parameter not present without indexed parameters
+                            indices = [ iop_info[channel][p]['index'] for p in iop_info[channel]
+                                if 'default' not in self.ap_spec['params'][p] ]
+                            numbers = sorted( i for i in indices if i != 'U' )
+                            if numbers[0] != 1 or any( j - i != 1
+                                for i, j in zip(numbers[:-1], numbers[1:]) ):
+                                raise ValueError("sparse indices in required {} parameters of {}".format(
+                                    channel, func_name))
+                            if 'U' in indices and len(indices) == 1:
+                                raise ValueError("{} requires unindexed {1} parameter but not indexed {1} parameters".format(
+                                    func_name, channel))
+                    
+                    # Map parameter to IO channel and IO pattern.
+                    for param_name in iop_info[channel]:
+                        param2channel[param_name] = channel
+                        param2iop[param_name] = iop
+                    
+            # Prepare parameters for argument parser.
+            for param_name in self.ap_spec['params']:
+                
+                # Get info for this parameter.
+                param_info = self.ap_spec['params'][param_name]
+                
+                # Set parameter name to be used in argument parser.
+                param_info['dest'] = param_name
+                
+                # If parameter has a default value, set as option or switch..
+                if 'default' in param_info:
+                    
+                    param_info['required'] = False
+                    
+                    # If default value is False, assign to switches..
+                    if param_info['type'] == 'bool' and param_info['default'] is False:
+                        param_info['group'] = 'switch'
+                    # ..otherwise assign to optionals.
+                    else:
+                        param_info['group'] = 'optional'
+                    
+                # ..otherwise, assign to positional parameters.
+                else:
+                    param_info['group'] = 'positional'
+                
+                # If this for input/output, change to IO parameter..
+                if param_name in param2channel:
+                    
+                    channel = param2channel[param_name]
+                    
+                    # Set parameter metavariable and flag.
+                    param_info['metavar'] = iop_info[channel][param_name]['metavar']
+                    param_info['flag'] = iop_info[channel][param_name]['flag']
+                    
+                    # Input/output parameters are treated as optionals. If
+                    # parameter was positional, set default value, using
+                    # standard input or output where appropriate.
+                    if param_info['group'] == 'positional':
+                        
+                        iop = param2iop[param_name]
+                        
+                        if iop == 'indexed' and iop_info[channel][param_name]['index'] == 1:
+                            param_info['required'] = False
+                            param_info['default'] = '-'
+                        elif iop == 'listed':
+                            param_info['required'] = False
+                            param_info['default'] = ['-']
+                        elif iop == 'single':
+                            param_info['required'] = False
+                            param_info['default'] = '-'
+                        else:
+                            param_info['required'] = True
+                            param_info['default'] = None
+                    
+                    # Mark as IO parameter.
+                    param_info['group'] = 'IO'
+                    
+                # ..otherwise if parameter has a short form, convert to short form..
+                elif param_name in _info['short_params']:
+                    
+                    # Check that this is not a compound type.
+                    if _gtypes[ param_info['type'] ].is_compound:
+                        raise TypeError("cannot create short-form parameter {!r} of type {}".format(
+                            param_name, param_info['type']))
+                    
+                    # Set flag to short form.
+                    param_info['flag'] = _info['short_params'][param_name]['flag']
+                    
+                    # Check parameter type matches that of short-form.
+                    if param_info['type'] != _info['short_params'][param_name]['type']:
+                        raise TypeError("{} has type mismatch for short-form parameter {!r}".format(
+                            func_name, param_name))
+                    
+                    # Short form parameters are treated as optionals.
+                    # If parameter was positional, set as required.
+                    if param_info['group'] == 'positional':
+                        param_info['required'] = True
+                        param_info['default'] = None
+                        
+                    try: # Check parameter default matches that of short-form.
+                        assert param_info['default'] == _info['short_params'][param_name]['default']
+                    except AssertionError:
+                        raise ValueError("{} has default value mismatch for short-form parameter {!r}".format(
+                            func_name, param_name))
+                    except KeyError:
+                        pass
+                    
+                    try: # Check parameter requirement matches that of short-form.
+                        assert param_info['required'] == _info['short_params'][param_name]['required']
+                    except AssertionError:
+                        raise ValueError("{} has requirement mismatch for short-form parameter {!r}".format(
+                            func_name, param_name))
+                    except KeyError:
+                        pass
+                    
+                    # Mark as short form optional.
+                    param_info['group'] = 'short'
+                
+                # ..otherwise if parameter is of a compound type, create
+                # two (mutually exclusive) parameters: one to accept argument
+                # as a string, the other to load it from a file..
+                elif _gtypes[ param_info['type'] ].is_compound:
+                    
+                    # Compound parameters are treated as optionals.
+                    # If parameter was positional, set as required.
+                    if param_info['group'] == 'positional':
+                        param_info['required'] = True
+                        param_info['default'] = None
+                    
+                    # Mark as 'compound'.
+                    param_info['group'] = 'compound'
+                    
+                    # Set compound parameter title.
+                    param_info['title'] = '{} argument'.format( param_name.replace('_', '-') )
+                    
+                    # If parameter is of a ductile type, set flag for
+                    # it to be passed directly on the command line.
+                    if _gtypes[ param_info['type'] ].is_ductile:
+                        param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
+                    
+                    # Set file parameter name.
+                    param_info['file_dest'] = '{}_file'.format(param_name)
+                    
+                    # Set flag for parameter to be passed as a file.
+                    param_info['file_flag'] = file_flag = '--{}-file'.format( param_name.replace('_', '-') )
+                    
+                    # Check that file option string does
+                    # not conflict with existing options.
+                    if file_flag in flag2param:
+                        raise ValueError("file flag of {} parameter {!r} conflicts with {!r}".format(
+                            func_name, param_name, flag2param[file_flag]))
+                    flag2param[file_flag] = '{} file flag'.format(param_name)
+                    
+                # ..otherwise if option or switch,
+                # create flag from parameter name.
+                elif param_info['group'] in ('optional', 'switch'):
+                    
+                    if len(param_name) > 1:
+                        param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
+                    else:
+                        param_info['flag'] = '-{}'.format(param_name)
+                 
+                # Append info to argument description as appropriate.
+                if param_info['group'] != 'positional':
+                    if param_info['default'] is not None:
+                        if param_info['group'] != 'switch' and not 'docstring-default' in param_info:
+                            param_info['description'] = '{} [default: {!r}]'.format(
+                                param_info['description'], param_info['default'])
+                    elif param_info['required']:
+                        param_info['description'] = '{} [required]'.format(
+                            param_info['description'])
+                
+                try: # Delete docstring default - no longer needed.
+                    del param_info['docstring-default']
+                except KeyError:
+                    pass
+                
+                # Check for conflicting option strings.
+                if 'flag' in param_info:
+                    flag = param_info['flag']
+                    if flag in flag2param:
+                        raise ValueError("flag of {} parameter {!r} conflicts with {!r}".format(
+                            func_name, param_name, flag2param[flag]))
+                    flag2param[flag] = param_name
+                
+                # Update parameter info.
+                self.ap_spec['params'][param_name] = param_info
+                
+        # ..otherwise, check that no parameters were defined.
+        elif len(param_names) > 0:
+            raise ValueError("{} parameters defined but not documented ~ {!r}".format(
+                func_name, param_names))
+        
+        self.__name__ = function.__name__
+        self.function = function
+        
+    def __call__(self, *args, **kwargs):
+        """Call gactfunc wrapper."""
+        return self.function(*args, **kwargs)
+
+class _GactfuncCollection(object):
+    """A gactfunc collection class."""
+    
+    def __init__(self):
+        """Init gactfunc collection."""
+        self._data = dict()
+        
+    def dump(self):
+        """Dump pickled gactfunc collection info."""
+        
+        # Ensure data directory exists.
+        data_dir = os.path.join('gactutil', 'data')
+        if not os.path.isdir(data_dir):
+            os.makedirs(data_dir)
+        
+        # Pickle gactfunc collection.
+        gaction_file = os.path.join(data_dir, 'gfi.p')
+        with open(gaction_file, 'w') as fh:
+            pickle.dump(self._data, fh)
+        
+    def load(self):
+        """Load pickled gactfunc collection info."""
+        gaction_file = os.path.join('data', 'gfi.p')
+        gaction_path = resource_filename('gactutil', gaction_file)
+        with open(gaction_path, 'r') as fh:
+            self._data = pickle.load(fh)
+    
+    def populate(self):
+        """Populate gactfunc collection from GACTutil package modules.
+        
+        NB: this function should only be called during package setup.
+        """
+        
+        # Validate caller.
+        caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
+        if caller_file != 'setup.py' or caller_func != '<module>':
+            raise RuntimeError("{} can only be populated during GACTutil package setup".format(
+                self.__class__.__name__))
+        
+        # Get mapping of package module names to their
+        # paths relative to the package 'setup.py' script.
+        mod_info = dict()
+        for [ directory, subdirs, files ] in os.walk('gactutil'):
+            prefix = directory.replace(os.sep, '.')
+            mod_files = [ f for f in files if f.endswith('.py') ]
+            mod_paths = [ os.path.join(directory, f) for f in mod_files ]
+            mod_names = [ '{}.{}'.format(prefix, (os.path.splitext(f))[0])
+                if f != '__init__.py' else prefix for f in mod_files ]
+            mod_info.update( { name: path for name, path in zip(mod_names, mod_paths) } )
+        
+        # With module info, create listing of all _Gactfunc instances (i.e. any
+        # functions with the @gactfunc decorator). Collect module and function
+        # name for each gactfunc instance. Check for conflicting gactfunc names.
+        gactfuncs = list()
+        func_spec_info = dict()
+        for mod_name, mod_path in mod_info.items():
+            module = load_source(mod_name, mod_path)
+            for k, x in getmembers(module):
+                if isinstance(x, _Gactfunc):
+                    func_name = x.__name__
+                    if func_name in func_spec_info:
+                        raise RuntimeError("conflicting gactfunc name ~ {!r}".format(func_name))
+                    func_spec_info[func_name] = OrderedDict([ ('module_name', mod_name),
+                        ('function_name', func_name) ])
+                    gactfuncs.append(x)
+        
+        # Populate multi-level dictionary of gactfunc specs, so that
+        # these can be accessed by the relevant sequence of commands,
+        # while checking for conflicting command sequences.
+        for function in gactfuncs:
+            try:
+                d = self._data
+                for cmd in function.commands[:-1]:
+                    if cmd in d:
+                        assert isinstance(d[cmd], dict)
+                    else:
+                        d[cmd] = dict()
+                    d = d[cmd]
+                assert function.commands[-1] not in d
+                d[ function.commands[-1] ] = func_spec_info[function.__name__]
+            except AssertionError:
+                raise RuntimeError("{} has conflicting gactfunc commands ~ {!r}".format(
+                    function.__name__, ' '.join(func.commands)))
+    
+    def prep_argparser(self):
+        """Prep command-line argument parser."""
+        
+        # Validate caller.
+        caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
+        if os.path.basename(caller_file) != 'gaction.py' or caller_func != 'gaction':
+            raise RuntimeError("function {!r} should only be called by GACTutil function 'gaction'".format(stack()[0][3]))
+        
+        # Set version string.
+        prog = os.path.splitext( os.path.basename(__file__) )[0]
+        about = _read_about()
+        version = '{}-{}'.format(prog, about['version'])
+        
+        # Init main argument parser.
+        ap = ArgumentParser(description='\n{}\n\n{}\n'.format(version, __doc__))
+        
+        # Add version parameter.
+        ap.add_argument('-v', '--version', action='version', version=version)
+        
+        # Add main subparser.
+        sp = ap.add_subparsers(title='commands')
+        
+        # Ensure gactfunc collection info loaded.
+        if len(self._data) == 0:
+            self.load()
+        
+        # Init parser chain with main parser-subparser pair.
+        parser_chain = OrderedDict([ ('gaction', (ap, sp)) ])
+        
+        # Setup argparser for every node in gactfunc command tree.
+        for commands, subcommands, func_spec in self.walk():
+            
+            # Pop elements of parser chain until its commands
+            # do not conflict with those of the current node.
+            while len(parser_chain) > 1 and ( len(commands) < len(parser_chain) - 1 or
+                next(reversed(parser_chain)) != commands[ len(parser_chain) - 2 ] ):
+                parser_chain.popitem()
+            
+            # Push elements onto parser chain until its
+            # commands match those of the current node.
+            while len(commands) > len(parser_chain) - 1:
+                
+                # Get final command in parser chain.
+                k = next(reversed(parser_chain))
+                
+                # Get first command for current node that doesn't
+                # have a corresponding parser-subparser pair.
+                cmd = commands[ len(parser_chain) - 1 ]
+                
+                # Create parser from subparser of previous parser chain element.
+                cap = parser_chain[k][1].add_parser(cmd)
+                
+                # If this node has subcommands, add a subparser..
+                if len(subcommands) > 0:
+                    csp = cap.add_subparsers(title='qualifiers')
+                # ..otherwise leave subparser unset.
+                else:
+                    csp = None
+                
+                # Add parser-subparser pair to parser chain.
+                parser_chain[cmd] = (cap, csp)
+            
+            # If this node corresponds to a gactfunc instance,
+            # populate argument parser with info and parameters.
+            if func_spec is not None:
+                
+                # Get function definition.
+                module = import_module(func_spec['module_name'])
+                function = getattr(module, func_spec['function_name'])
+                
+                # Set gactfunc summary.
+                cap.summary = function.ap_spec['summary']
+                
+                # Set gactfunc description, if present.
+                try:
+                    cap.description = '\n\n{}'.format(function.ap_spec['description'])
+                except KeyError:
+                    pass
+                
+                # If gactfunc has parameters..
+                if 'params' in function.ap_spec:
+                    
+                    # ..add each parameter to the argument parser.
+                    for param_name in function.ap_spec['params']:
+                        
+                        # Get info for this parameter.
+                        param_info = function.ap_spec['params'][param_name]
+                        
+                        if param_info['group'] == 'positional':
+                        
+                            cap.add_argument(param_info['dest'],
+                                help = param_info['description'])
+                                
+                        elif param_info['group'] == 'optional':
+                        
+                            cap.add_argument(param_info['flag'],
+                                dest     = param_info['dest'],
+                                metavar  = param_info['type'].upper(),
+                                default  = param_info['default'],
+                                required = param_info['required'],
+                                help     = param_info['description'])
+                        
+                        elif param_info['group'] == 'short':
+                            
+                            cap.add_argument(param_info['flag'],
+                                dest     = param_info['dest'],
+                                default  = param_info['default'],
+                                required = param_info['required'],
+                                help     = param_info['description'])
+                            
+                        elif param_info['group'] == 'switch':
+                        
+                            cap.add_argument(param_info['flag'],
+                                dest   = param_info['dest'],
+                                action = 'store_true',
+                                help   = param_info['description'])
+                                
+                        elif param_info['group'] == 'compound':
+                            
+                            # If compound object parameter is of a parameter type,
+                            # prepare to read from command line or load from file..
+                            if _gtypes[ param_info['type'] ].is_ductile:
+                            
+                                # Set info for pair of alternative parameters.
+                                item_help = 'Set {} from string.'.format(param_info['type'])
+                                file_help = 'Load {} from file.'.format(param_info['type'])
+                                
+                                # Add (mutually exclusive) pair of alternative parameters.
+                                ag = cap.add_argument_group(
+                                    title       = param_info['title'],
+                                    description = param_info['description'])
+                                mxg = ag.add_mutually_exclusive_group(
+                                    required    = param_info['required'])
+                                mxg.add_argument(param_info['flag'],
+                                    dest        = param_info['dest'],
+                                    metavar     = 'STR',
+                                    default     = param_info['default'],
+                                    help        = item_help)
+                                mxg.add_argument(param_info['file_flag'],
+                                    dest        = param_info['file_dest'],
+                                    metavar     = 'PATH',
+                                    help        = file_help)
+                            
+                            # ..otherwise prepare to load it from file.
+                            else:
+                                
+                                cap.add_argument(param_info['file_flag'],
+                                    dest     = param_info['file_dest'],
+                                    metavar  = 'PATH',
+                                    default  = param_info['default'],
+                                    required = param_info['required'],
+                                    help     = param_info['description'])
+                        
+                        elif param_info['group'] == 'IO':
+                            
+                            cap.add_argument(param_info['flag'],
+                                dest     = param_info['dest'],
+                                metavar  = param_info['metavar'],
+                                default  = param_info['default'],
+                                required = param_info['required'],
+                                help     = param_info['description'])
+                
+                # Set function definition for this gactfunc.
+                cap.set_defaults(function=function)
+        
+        return ap
+    
+    def proc_args(self, args):
+        """Process parsed command-line arguments."""
+        
+        # Validate caller.
+        caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
+        if os.path.basename(caller_file) != 'gaction.py' or caller_func != 'gaction':
+            raise RuntimeError("function {!r} should only be called by GACTutil function 'gaction'".format(stack()[0][3]))
+        
+        # Pop return-value output file, if present.
+        retfile = args.__dict__.pop('retfile', None)
+        
+        # Pop gactfunc definition.
+        try:
+            function = args.__dict__.pop('function')
+        except KeyError:
+            raise RuntimeError("cannot run command - no function available")
+        
+        # Get parameter info for this gactfunc.
+        param_info = function.ap_spec['params']
+        
+        # Process each argument.
+        for param_name in args.__dict__.keys():
+            
+            # Assume argument is not to be loaded from file.
+            filebound = False
+            
+            # Get expected argument type.
+            type_name = param_info[param_name]['type']
+            
+            # Get argument value.
+            try:
+                arg = args.__dict__[param_name]
+            except KeyError: # Filebound compound type.
+                arg = args.__dict__[param_name] = None
+            
+            # If parameter is in compound group,
+            # check both alternative arguments.
+            if param_info[param_name]['group'] == 'compound':
+                
+                # Get file argument value.
+                file_arg = args.__dict__[ param_info[param_name]['file_dest'] ]
+                
+                # If file argument specified, set argument value from file
+                # argument, indicate argument value is to be loaded from file..
+                if file_arg is not None:
+                    arg = file_arg
+                    filebound = True
+                # ..otherwise check argument specified (if required).
+                elif arg is None and param_info[param_name]['required']:
+                    raise ArgumentError("{} is required".format(param_info['title']))
+                
+                # Remove file parameter from parsed arguments.
+                del args.__dict__[ param_info[param_name]['file_dest'] ]
+            
+            # If argument specified, get from file or string.
+            if arg is not None:
+                if filebound:
+                    args.__dict__[param_name] = _object_from_file(arg, type_name)
+                else:
+                    args.__dict__[param_name] = _object_from_string(arg, type_name)
+        
+        return function, args, retfile
+    
+    def walk(self):
+        """Generate nodes of gactfunc command tree.
+        
+        Yields:
+            tuple: Contains three elements: `commands` are the keys specifying
+                   the current node in the gactfunc command tree, and matching
+                   the commands input in the terminal; `subcommands` are the
+                   subcommands available at this node; and `func_spec` gives
+                   information about a gactfunc, if accessible at the current
+                   node.
+        """
+        
+        # Init command stack from root of gactfunc command tree.
+        command_stack = [ (list(), self._data) ]
+        
+        # Init list of checked commands. This is used to handle the
+        # (unlikely) event of a cycle in the gactfunc command tree.
+        checked = list()
+        
+        while True:
+            
+            try: # Pop next node from command stack.
+                (commands, x) = command_stack.pop()
+            except IndexError:
+                break
+            
+            # Skip previously checked nodes.
+            if x in checked:
+                continue
+            
+            # Mark node as checked.
+            checked.append(x)
+            
+            # If this is a function specification, return that..
+            if isinstance(x, OrderedDict):
+                
+                # Set function info.
+                func_spec = x
+                
+                # No subcommands.
+                subcommands = tuple()
+                
+            # ..otherwise push subcommands onto command stack, and return those.
+            elif isinstance(x, dict):
+                
+                # Get subcommands in alphabetical order.
+                subcommands = tuple( sorted( x.keys() ) )
+                
+                # Push subcommands onto command stack in reverse alphabetical
+                # order, so that they will be yielded in alphabetical order.
+                for k in reversed(subcommands):
+                    command_stack.append( (commands + [k], x[k]) )
+                   
+                # No function.
+                func_spec = None
+                
+            else:
+                raise RuntimeError("invalid gactfunc command tree")
+            
+            yield tuple(commands), tuple(subcommands), func_spec
 
 ################################################################################
 
@@ -231,8 +1378,8 @@ def _DataFrame_from_file(f):
     
     try:
         with TextReader(f) as reader:
-            x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False, 
-                skipinitialspace=True, true_values=_info['true_values'], 
+            x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False,
+                skipinitialspace=True, true_values=_info['true_values'],
                 false_values=_info['false_values'], keep_default_na=False,
                 na_values=_info['na_values'])
     except (IOError, OSError):
@@ -248,8 +1395,8 @@ def _DataFrame_from_string(s):
     
     try:
         with BytesIO(s) as fh:
-            x = read_csv(fh, sep=',', header=0, mangle_dupe_cols=False, 
-                skipinitialspace=True, true_values=_info['true_values'], 
+            x = read_csv(fh, sep=',', header=0, mangle_dupe_cols=False,
+                skipinitialspace=True, true_values=_info['true_values'],
                 false_values=_info['false_values'], keep_default_na=False,
                 na_values=_info['na_values'])
     except (IOError, OSError):
@@ -286,7 +1433,7 @@ def _dict_from_file(f):
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
     
-    _validate_param_type(x)
+    _Gactfunc._validate_param_type(x)
     
     return x
 
@@ -305,7 +1452,7 @@ def _dict_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse dict from string ~ {!r}".format(s))
     
-    _validate_param_type(x)
+    _Gactfunc._validate_param_type(x)
     
     return x
 
@@ -413,7 +1560,7 @@ def _list_from_file(f):
         while len(x) > 0 and x[-1] is None:
             x.pop()
     
-    _validate_param_type(x)
+    _Gactfunc._validate_param_type(x)
     
     return x
 
@@ -432,7 +1579,7 @@ def _list_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse list from string ~ {!r}".format(s))
     
-    _validate_param_type(x)
+    _Gactfunc._validate_param_type(x)
     
     return x
 
@@ -575,985 +1722,13 @@ def _string_from_file(f):
     """Get string from file."""
     with TextReader(f) as fh:
         s = fh.read().rstrip()
-    _validate_param_type(s)
+    _Gactfunc._validate_param_type(s)
     return s
 
 def _string_to_file(s, f):
     """Output string to file."""
     with TextWriter(f) as fh:
         fh.write('{}\n'.format(s))
-
-def _parse_gactfunc_docstring(function):
-    """Parse command function docstring.
-    
-    This function parses a command function docstring and returns an ordered 
-    dictionary mapping headers to documentation. Command function docstrings 
-    must be in Google-style format. The keys of the returned dictionary will
-    correspond to the docstring headers (e.g. 'Args'), in addition to two 
-    special headers: 'Summary', which will contain the docstring summary line;
-    and 'Description', which will contain the docstring description, if present.
-    """
-    
-    # Get function name.
-    func_name = function.__name__
-    
-    # Check command function is indeed a function.
-    if not isfunction(function):
-        return TypeError("object is not a function ~ {!r}".format(func_name))
-    
-    # Get function docstring.
-    docstring = function.__doc__
-    
-    # Set default parsed docstring.
-    doc_info = None
-    
-    # Parse docstring if present.
-    if docstring is not None and docstring.strip() != '':
-        
-        # Init raw docstring.
-        raw_info = OrderedDict()
-        
-        # Split docstring into lines.
-        lines = deque( docstring.split('\n'))
-        
-        # Set summary from first non-blank line.
-        line = lines.popleft().strip()
-        if line == '':
-            line = lines.popleft().strip()
-            if line == '':
-                raise ValueError("{} docstring summary is a blank line".format(func_name))
-        raw_info['Summary'] = [line]
-        
-        # Check summary followed by a blank line.
-        if len(lines) > 0:
-            line = lines.popleft().strip()
-            if line != '':
-                raise ValueError("{} docstring summary is not followed by a blank line".format(func_name))
-        
-        # Get list of remaining lines, with common indentation removed.
-        lines = deque( (dedent( '\n'.join(lines) ) ).split('\n') )
-        
-        # Init docstring description.
-        raw_info['Description'] = list()
-        
-        # Docstring description includes everything before the first header.
-        h = 'Description'
-        
-        # Group content by docstring section.
-        while len(lines) > 0:
-            
-            # Get first of remaining lines.
-            line = lines.popleft()
-            
-            # Try to match line to a docstring header.
-            m = _info['regex']['docstring-header'].match(line)
-            
-            # If matches, set header of new section..
-            if m is not None:
-                
-                # Set current header.
-                h = m.group(1)
-                
-                # Map header to alias, if relevant.
-                if h in _info['docstring-headers']['alias-mapping']:
-                    h = _info['docstring-headers']['alias-mapping'][h]
-                
-                # Check header is known.
-                if h not in _info['docstring-headers']['known']:
-                    raise ValueError("unknown docstring header ~ {!r}".format(h))
-                
-                # Check header is supported.
-                if h not in _info['docstring-headers']['supported']:
-                    raise ValueError("unsupported docstring header ~ {!r}".format(h))
-                
-                # Check for duplicate headers.
-                if h in raw_info:
-                    raise ValueError("duplicate docstring header ~ {!r}".format(h))
-                
-                raw_info[h] = list()
-                
-            # ..otherwise append line to current section.
-            else:
-                raw_info[h].append(line)
-        
-        # Remove docstring description, if empty.
-        if len(raw_info['Description']) == 0:
-            del raw_info['Description']
-        
-        # Init parsed docstring.
-        doc_info = OrderedDict()
-        
-        # Process each docstring section.
-        for h in raw_info:
-            
-            # Get docstring section as unindented lines.
-            raw_info[h] = ( dedent( '\n'.join(raw_info[h]) ) ).split('\n')
-            
-            if h == 'Args':
-                
-                # Init parsed parameter info.
-                param_info = OrderedDict()
-                
-                param_name = None
-                
-                # Group content by parameter. 
-                for line in raw_info[h]:
-                    
-                    line = line.strip()
-                    
-                    # Skip blank lines.
-                    if line != '':
-                        
-                        # Try to match line to expected pattern of parameter.
-                        m = _info['regex']['docstring-param'].match(line)
-                    
-                        # If this is a parameter definition line, get parameter info..
-                        if m is not None:
-                            
-                            param_name, type_name, param_desc = m.groups()
-                            
-                            # Check parameter does not denote unenumerated arguments.
-                            if param_name.startswith('*'):
-                                raise RuntimeError("{} docstring must not specify unenumerated arguments".format(
-                                    func_name))
-                            
-                            # Check parameter type specified.
-                            if type_name is None:
-                                raise ValueError("{} docstring must specify a type for parameter {!r}".format(
-                                    func_name, param_name))
-                            
-                            # Check type name is not 'None'.
-                            if type_name == 'None':
-                                raise ValueError("{} docstring specifies 'NoneType' for parameter {!r}".format(
-                                    func_name, param_name))
-                            
-                            # Check parameter type is supported.
-                            if not _gtypes[type_name].is_ductile:
-                                raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
-                                    func_name, type_name, param_name))
-                            
-                            # Check for duplicate parameters.
-                            if param_name in param_info:
-                                raise ValueError("{} docstring contains duplicate parameter ~ {!r}".format(
-                                    func_name, param_name))
-                            
-                            param_info[param_name] = { 
-                                'type': type_name, 
-                                'description': param_desc
-                            }
-                        
-                        # ..otherwise if parameter defined, treat this as
-                        # a continuation of the parameter description..
-                        elif param_name is not None:
-                            
-                            param_info[param_name]['description'] = '{} {}'.format(
-                                param_info[param_name]['description'], line)
-                                
-                        # ..otherwise this is not a valid docstring parameter.
-                        else:
-                            raise ValueError("failed to parse docstring for function ~ {!r}".format(
-                                func_name))
-                
-                # Validate docstring default info.
-                for param_name in param_info:
-                    
-                    # Try to match default definition pattern in parameter description.
-                    defaults = _info['regex']['docstring-default'].findall(
-                        param_info[param_name]['description'])
-                    
-                    # If a default definition matched, keep 
-                    # string representation of default value..
-                    if len(defaults) == 1:
-                        param_info[param_name]['docstring-default'] = defaults[0]
-                    # ..otherwise the description has ambiguous default info.
-                    elif len(defaults) > 1:
-                        raise ValueError("{} docstring has multiple defaults for parameter {!r}".format(
-                            func_name, param_name))
-                
-                # Set parsed parameter info for docstring.
-                doc_info[h] = param_info
-                
-            elif h == 'Returns':
-                
-                type_name = None
-                description = list()
-                
-                # Process each line of return value section.
-                for line in raw_info[h]:
-                    
-                    line = line.strip()
-                    
-                    # Skip blank lines.
-                    if line != '':
-                        
-                        # Try to match line to expected pattern of return value.
-                        m = _info['regex']['docstring-return'].match(line)
-                            
-                        # If return value type info is present, 
-                        # get type info and initial description..
-                        if m is not None:
-                                
-                            type_name = m.group(1)
-                            description.append( m.group(2) )
-                                
-                            # Check parameter type specified.
-                            if type_name is None:
-                                raise ValueError("{} docstring must specify a type for return value".format(
-                                    func_name))
-                                
-                            # Check type name is not 'None'.
-                            if type_name == 'None':
-                                raise ValueError("{} docstring specifies 'None' for return value".format(
-                                    func_name))
-                                
-                            # Check return value type is supported.
-                            if type_name not in _gtypes:
-                                raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
-                                    func_name, type_name ))
-                            
-                        # ..otherwise if return value type already
-                        # identified, append line to description..
-                        elif type_name is not None:
-                            
-                            description.append(line)
-                            
-                        # ..otherwise this is not a valid docstring return value.
-                        else:
-                            raise ValueError("failed to parse docstring for function ~ {!r}".format(
-                                func_name))
-                
-                # Set parsed return value info for docstring.
-                doc_info[h] = { 
-                    'type': type_name,
-                    'description': ' '.join(description)
-                }
-                
-            else:
-                
-                # Strip leading/trailing blank lines.
-                lines = raw_info[h]
-                for i in (0, -1):
-                    while len(lines) > 0 and lines[i].strip() == '':
-                        lines.pop(i)
-                doc_info[h] = '\n'.join(lines)
-       
-    return doc_info
-
-def _parse_gactfunc_name(function):
-    """Parse command function name."""
-    
-    # Get function name.
-    func_name = function.__name__
-    
-    # Check command function is indeed a function.
-    if not isfunction(function):
-        return TypeError("object is not a function ~ {!r}".format(func_name))
-    
-    # Try to match function name to command function
-    m = _info['regex']['command-function'].match(func_name)
-    
-    # Parse command function.
-    try:
-        command, qualifier = m.groups()
-    except AttributeError:
-        raise ValueError("command function does not follow GACTutil naming convention ~ {!r}".format(func_name))
-        
-    return command, qualifier
-
-def _prep_argparser():
-    """Prep command-line argument parser."""
-    
-    # Validate caller.
-    caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
-    if os.path.basename(caller_file) != 'gaction.py' or caller_func != 'gaction':
-        raise RuntimeError("function {!r} should only be called by GACTutil function 'gaction'".format(stack()[0][3]))
-    
-    # Set version string.
-    prog = os.path.splitext( os.path.basename(__file__) )[0]
-    about = _read_about()
-    version = '{}-{}'.format(prog, about['version'])
-    
-    # Read package command info.
-    cmd_info = _read_command_info()
-    
-    # Init argument parser.
-    ap = ArgumentParser(description='\n{}\n\n{}\n'.format(version, __doc__))
-    
-    # Add version parameter.
-    ap.add_argument('-v', '--version', action='version', version=version)
-    
-    # Add command subparser.
-    sp = ap.add_subparsers(title='commands')
-    
-    # Populate argument parser for each command and function.
-    for c in sorted( cmd_info.keys() ):
-        
-        # Add parser for this command.
-        apc = sp.add_parser(c)
-        
-        # Add qualifier subparser for this command.
-        spc = apc.add_subparsers(title='qualifiers')
-        
-        # Populate argument parser for every qualifier of this command.
-        for q in sorted( cmd_info[c].keys() ):
-            
-            # Get module of the given command function.
-            module = import_module(cmd_info[c][q]['module'])
-            
-            # Get command function definition.
-            function = getattr(module, cmd_info[c][q]['name'])
-            
-            # Get command function summary.
-            summary = cmd_info[c][q]['summary']
-            
-            # Get command function description, if present.
-            if 'description' in cmd_info[c][q]:
-                description = '\n\n{}'.format(cmd_info[c][q]['description'])
-            else:
-                description = None
-            
-            # Add parser for this command function.
-            apq = spc.add_parser(q, help=summary, description=description)
-            
-            # If command function has parameters..
-            if 'params' in cmd_info[c][q]:
-                
-                # ..add each parameter to the argument parser.
-                for param_name in cmd_info[c][q]['params']:
-                    
-                    # Get info for this parameter.
-                    param_info = cmd_info[c][q]['params'][param_name]
-                    
-                    if param_info['group'] == 'positional':
-                    
-                        apq.add_argument(param_info['dest'], 
-                            help = param_info['description'])
-                            
-                    elif param_info['group'] == 'optional':
-                    
-                        apq.add_argument(param_info['flag'], 
-                            dest     = param_info['dest'], 
-                            metavar  = param_info['type'].upper(),
-                            default  = param_info['default'], 
-                            required = param_info['required'], 
-                            help     = param_info['description'])
-                    
-                    elif param_info['group'] == 'short':
-                        
-                        apq.add_argument(param_info['flag'], 
-                            dest     = param_info['dest'],
-                            default  = param_info['default'], 
-                            required = param_info['required'], 
-                            help     = param_info['description'])
-                        
-                    elif param_info['group'] == 'switch':
-                    
-                        apq.add_argument(param_info['flag'], 
-                            dest   = param_info['dest'], 
-                            action = 'store_true', 
-                            help   = param_info['description'])
-                            
-                    elif param_info['group'] == 'compound':
-                        
-                        # If compound object parameter is of a parameter type,
-                        # prepare to read from command line or load from file..
-                        if _gtypes[ param_info['type'] ].is_ductile:
-                        
-                            # Set info for pair of alternative parameters.
-                            item_help = 'Set {} from string.'.format(param_info['type'])
-                            file_help = 'Load {} from file.'.format(param_info['type'])
-                            
-                            # Add (mutually exclusive) pair of alternative parameters.
-                            ag = apq.add_argument_group(
-                                title       = param_info['title'],
-                                description = param_info['description'])
-                            mxg = ag.add_mutually_exclusive_group(
-                                required    = param_info['required'])
-                            mxg.add_argument(param_info['flag'],
-                                dest        = param_info['dest'],
-                                metavar     = 'STR',
-                                default     = param_info['default'],
-                                help        = item_help)
-                            mxg.add_argument(param_info['file_flag'],
-                                dest        = param_info['file_dest'],
-                                metavar     = 'PATH',
-                                help        = file_help)
-                        
-                        # ..otherwise prepare to load it from file.
-                        else:
-                            
-                            apq.add_argument(param_info['file_flag'],
-                                dest     = param_info['file_dest'],
-                                metavar  = 'PATH',
-                                default  = param_info['default'],
-                                required = param_info['required'],
-                                help     = param_info['description'])
-                    
-                    elif param_info['group'] == 'IO':
-                        
-                        apq.add_argument(param_info['flag'],
-                            dest     = param_info['dest'],
-                            metavar  = param_info['metavar'],
-                            default  = param_info['default'],
-                            required = param_info['required'],
-                            help     = param_info['description'])
-            
-            
-            # Set function for this commmand.
-            apq.set_defaults(function=function)
-    
-    return ap
-
-def _proc_args(args):
-    """Process parsed command-line arguments."""
-    
-    # Validate caller.
-    caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
-    if os.path.basename(caller_file) != 'gaction.py' or caller_func != 'gaction':
-        raise RuntimeError("function {!r} should only be called by GACTutil function 'gaction'".format(stack()[0][3]))
-    
-    # Read package command info.
-    cmd_info = _read_command_info()
-    
-    # Pop return-value output file, if present.
-    retfile = args.__dict__.pop('retfile', None)
-    
-    # Pop command function definition.
-    try:
-        function = args.__dict__.pop('function')
-    except KeyError:
-        raise RuntimeError("cannot run command - no function available")
-    
-    # Get parameter info for this command function.
-    command, qualifier = _parse_gactfunc_name(function)
-    param_info = cmd_info[command][qualifier]['params']
-    
-    # Process each argument.
-    for param_name in args.__dict__.keys():
-        
-        # Assume argument is not to be loaded from file.
-        filebound = False
-        
-        # Get expected argument type.
-        type_name = param_info[param_name]['type']
-        
-        # Get argument value.
-        try:
-            arg = args.__dict__[param_name]
-        except KeyError: # Filebound compound type.
-            arg = args.__dict__[param_name] = None
-        
-        # If parameter is in compound group, 
-        # check both alternative arguments.
-        if param_info[param_name]['group'] == 'compound': 
-            
-            # Get file argument value.
-            file_arg = args.__dict__[ param_info[param_name]['file_dest'] ]
-            
-            # If file argument specified, set argument value from file 
-            # argument, indicate argument value is to be loaded from file..
-            if file_arg is not None:
-                arg = file_arg
-                filebound = True
-            # ..otherwise check argument specified (if required).
-            elif arg is None and param_info[param_name]['required']:
-                raise ArgumentError("{} is required".format(param_info['title']))
-            
-            # Remove file parameter from parsed arguments.
-            del args.__dict__[ param_info[param_name]['file_dest'] ]
-        
-        # If argument specified, get from file or string.
-        if arg is not None:
-            if filebound:
-                args.__dict__[param_name] = _object_from_file(arg, type_name)
-            else:
-                args.__dict__[param_name] = _object_from_string(arg, type_name)
-    
-    return function, args, retfile
-
-def _setup_commands():
-    """Setup package commands.
-    
-    Outputs a package data file in YAML format with command function information.
-    
-    NB: this function should only be called during package setup.
-    """
-    
-    # Validate caller.
-    caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
-    if caller_file != 'setup.py' or caller_func != '<module>':
-        raise RuntimeError("function {!r} should only be called during GACTutil package setup".format(stack()[0][3]))
-    
-    # Get mapping of package module names to their  
-    # paths relative to the package 'setup.py' script.
-    mod_info = dict()
-    for [ directory, subdirs, files ] in os.walk('gactutil'):
-        prefix = directory.replace(os.sep, '.')
-        mod_files = [ f for f in files if f.endswith('.py') ]
-        mod_paths = [ os.path.join(directory, f) for f in mod_files ]
-        mod_names = [ '{}.{}'.format(prefix, (os.path.splitext(f))[0]) 
-            if f != '__init__.py' else prefix for f in mod_files ]
-        mod_info.update( { name: path for name, path in zip(mod_names, mod_paths) } )
-    
-    # With module info, create listing of info for every package function. Each 
-    # element will be a tuple containing respectively the name of the function's
-    # module, the name of the function itself, and the function definition.
-    func_tuples = list()
-    for mod_name, mod_path in mod_info.items():
-        module = load_source(mod_name, mod_path)
-        func_tuples += [ (mod_name, func_name, function) 
-            for func_name, function in getmembers(module, isfunction) 
-            if getmodule(function) == module ]
-    
-    # Init command info from those functions that follow the package  
-    # command function naming convention (i.e. <command>_<qualifier>). 
-    cmd_info = dict()
-    for mod_name, func_name, function in func_tuples:
-        try:
-            command, qualifier = _parse_gactfunc_name(function)
-        except (TypeError, ValueError):
-            continue
-        if command in cmd_info and qualifier in cmd_info[command]:
-            raise ValueError("duplicated command function "
-                "- {!r}".format(func_name))
-        cmd_info.setdefault(command, dict())
-        cmd_info[command][qualifier] = OrderedDict([ ('module', mod_name),
-            ('name', func_name), ('function', function) ])
-    
-    # Process each command function for a given command and qualifier.
-    for command in cmd_info:
-        
-        for qualifier in cmd_info[command]:
-            
-            # Get existing command info for this function.
-            func_info = cmd_info[command][qualifier]
-            
-            # Get function definition.
-            function = func_info.pop('function')
-            
-            # Get function parameter spec.
-            param_spec = getargspec(function)
-            
-            # Check that there are no unenumerated arguments.
-            if param_spec.varargs is not None or param_spec.keywords is not None:
-                raise ValueError("{} cannot have unenumerated arguments".format(func_info['name']))
-            
-            # Get enumerated parameter names.
-            param_names = param_spec.args
-            
-            # Map formal keyword parameters to their defaults.
-            if param_spec.defaults is not None:
-                i = len(param_spec.defaults)
-                spec_def_info = { k: x for k, x in 
-                    zip(param_names[-i:], param_spec.defaults) }
-            else:
-                spec_def_info = None
-            
-            # Set docstring info from command function docstring.
-            doc_info = _parse_gactfunc_docstring(function)
-            
-            # Check that command function has been documented.
-            if doc_info is None:
-                raise ValueError("GACTutil command function {!r} is not documented".format(func_info['name']))
-            
-            func_info['summary'] = doc_info['Summary']
-            
-            if 'Description' in doc_info:
-                func_info['description'] = doc_info['Description']
-            
-            # Init flag set to check for conflicting option strings.
-            flag2param = dict()
-            
-            # If parameters documented, validate them..
-            if 'Args' in doc_info:
-                
-                # Set command function parameter info from parsed docstring.
-                func_info['params'] = doc_info['Args']
-                
-                # Get set of documented parameters.
-                doc_param_set = set(func_info['params'])
-                
-                # Get set of parameters specified in function definition.
-                spec_param_set = set(param_names)
-                
-                # Check for parameters in docstring but not in function definition.
-                undef_params = list(doc_param_set - spec_param_set)
-                if len(undef_params) > 0:
-                    raise ValueError("{} parameters documented but not defined ~ {!r}".format(
-                        func_info['name'], undef_params))
-                        
-                # Check for parameters in function definition but not in docstring.
-                undoc_params = list(spec_param_set - doc_param_set)
-                if len(undoc_params) > 0:
-                    raise ValueError("{} parameters defined but not documented ~ {!r}".format(
-                        func_info['name'], undoc_params))
-                
-                # Validate any formal keyword parameters.
-                if spec_def_info is not None:
-                    
-                    for param_name, default in spec_def_info.items():
-                        
-                        func_info['params'][param_name]['default'] = default
-                        
-                        # Skip unspecified defaults as we cannot validate them.
-                        if default is None:
-                            continue
-                            
-                        # Get parameter type.
-                        type_name = func_info['params'][param_name]['type']
-                        
-                        # Check that the defined default value is of the 
-                        # type specified in the function documentation.
-                        try:
-                            _validate_param_type(default, type_name)
-                        except (TypeError, ValueError):
-                            raise TypeError("{} definition has default type mismatch for parameter {!r}".format(
-                                func_info['name'], param_name))
-                        
-                        # Skip undocumented defaults.
-                        if 'docstring-default' not in func_info['params'][param_name]:
-                            continue
-                            
-                        # Get string representation of docstring default.
-                        docstring_default = func_info['params'][param_name]['docstring-default']
-                        
-                        try: # Coerce documented default from string.
-                            coerced_default = _object_from_string(docstring_default, type_name)
-                        except (TypeError, ValueError):
-                            raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
-                                func_info['name'], param_name))
-                            
-                        # Check that documented default matches actual default.
-                        if coerced_default != default:
-                            raise ValueError("{} has default value mismatch for parameter {!r}".format(
-                                func_info['name'], param_name))
-                
-                # Init input/output parameter set info.
-                func_info['iop'] = { k: None for k in _info['iop'] }
-                iop_info = { k: {} for k in _info['iop'] }
-                param2channel = dict()
-                param2iop = dict()
-                
-                # Get info on command function input/output (IO) patterns.
-                for channel in _info['iop']:
-                    
-                    # Check for each IO pattern, store info on matching pattern.
-                    for iop in _info['iop'][channel]:
-                        
-                        # Get info on this IO pattern.
-                        regex, metavar, flag = [ _info['iop'][channel][iop][k]
-                            for k in ('regex', 'metavar', 'flag') ]
-                        
-                        # If return-value IO pattern, check function for explicit return..
-                        if iop == 'returned':
-                            
-                            # Set special parameter name for return value.
-                            param_name = 'retfile'
-                            
-                            # Check if function contains explicit return.
-                            explicit_return = any( token == 'return' for token in 
-                                reversed( _tokenise_source( getsource(function) ) ) )
-                            
-                            # If no explicit return in command function source, check return
-                            # value not documented, then skip to next parameter set.
-                            if not explicit_return:
-                                if 'Returns' in doc_info:
-                                    raise ValueError("{} return value documented but not defined".format(
-                                        func_info['name']))
-                                continue
-                        
-                        # ..otherwise check parameter names.
-                        else:
-                            
-                            # Try to match parameter names to those expected for this parameter set.
-                            matches = [ regex.match(param_name) for param_name in param_names ]
-                            
-                            # Get mapping of params to matches for this parameter set.
-                            param2match = { p: m for p, m in zip(param_names, matches) 
-                                if m is not None }
-                            
-                            # If no parameters matched, skip to next parameter set.
-                            if len(param2match) == 0:
-                                continue
-                            
-                        # Whether function parameter or return value, store 
-                        # matching parameter set, checking for any conflicts.
-                        if func_info['iop'][channel] is not None:
-                            raise ValueError("{} has conflicting {} parameter sets ~ {!r}".format(
-                                func_info['name'], channel, (func_info['iop'][channel], iop)))
-                        func_info['iop'][channel] = iop
-                        
-                        if iop == 'returned':
-                            
-                            # Check return value documented.
-                            if not 'Returns' in doc_info:
-                                raise ValueError("{} return value defined but not documented".format(
-                                    func_info['name']))
-                            
-                            # Check for conflicting function parameter.
-                            if param_name in func_info['params']:
-                                raise ValueError("{} return value command-line parameter conflicts with function parameter {!r}".format(
-                                    func_info['name'], param_name))
-                            
-                            # Store parameter info for return value parameter.
-                            iop_info[channel][param_name] = {
-                                'metavar': metavar,
-                                'flag': flag
-                            }
-                            
-                            # Update parameter info with special return value option.
-                            func_info['params'][param_name] = {
-                                'default': '-',
-                                'description': doc_info['Returns']['description'],
-                                'type': doc_info['Returns']['type']
-                            }
-                            
-                        else:
-                            
-                            # Store parameter info for each parameter in this set.
-                            for param_name in param2match:
-                                
-                                iop_info[channel][param_name] = {
-                                    'metavar': regex.sub(metavar, param_name),
-                                    'flag': regex.sub(flag, param_name)
-                                }
-                                
-                                # If these are indexed input/output files, get
-                                # parameter index, as an integer if possible.
-                                if iop == 'indexed':
-                                    i = param2match[param_name].group('index')
-                                    try:
-                                        iop_info[channel][param_name]['index'] = int(i)
-                                    except ValueError:
-                                        iop_info[channel][param_name]['index'] = i
-                                
-                                # Check parameter type is as expected.
-                                type_name = func_info['params'][param_name]['type']
-                                if type_name != 'string':
-                                    raise TypeError("{} {} parameter must be of type string, not {} ~ {!r}".format(
-                                        func_info['name'], channel, type_name, param_name))
-                            
-                            if iop == 'indexed':
-                                
-                                # Check indexed parameters are as expected:
-                                # * numbered indices start at 1, increment by 1
-                                # * unindexed parameter not present without indexed parameters
-                                indices = [ iop_info[channel][p]['index'] for p in iop_info[channel] ]
-                                numbers = sorted( i for i in indices if i != 'U' )
-                                if numbers[0] != 1 or any( j - i != 1 
-                                    for i, j in zip(numbers[:-1], numbers[1:]) ):
-                                    raise ValueError("sparse indices in {} parameters of {}".format(
-                                        channel, func_info['name']))
-                                if 'U' in indices and len(indices) == 1:
-                                    raise ValueError("{} defines unindexed {1} parameter but not indexed {1} parameters".format(
-                                        func_info['name'], channel))
-                                
-                                # Check required indexed parameters are as expected:
-                                # * numbered indices start at 1, increment by 1
-                                # * unindexed parameter not present without indexed parameters
-                                indices = [ iop_info[channel][p]['index'] for p in iop_info[channel]
-                                    if 'default' not in func_info['params'][p] ]
-                                numbers = sorted( i for i in indices if i != 'U' )
-                                if numbers[0] != 1 or any( j - i != 1 
-                                    for i, j in zip(numbers[:-1], numbers[1:]) ):
-                                    raise ValueError("sparse indices in required {} parameters of {}".format(
-                                        channel, func_info['name']))
-                                if 'U' in indices and len(indices) == 1:
-                                    raise ValueError("{} requires unindexed {1} parameter but not indexed {1} parameters".format(
-                                        func_info['name'], channel))
-                        
-                        # Map parameter to IO channel and IO pattern.
-                        for param_name in iop_info[channel]:
-                            param2channel[param_name] = channel
-                            param2iop[param_name] = iop
-                        
-                # Prepare parameters for argument parser.
-                for param_name in func_info['params']:
-                    
-                    # Get info for this parameter.
-                    param_info = func_info['params'][param_name]
-                    
-                    # Set parameter name to be used in argument parser.
-                    param_info['dest'] = param_name
-                    
-                    # If parameter has a default value, set as option or switch..
-                    if 'default' in param_info:
-                        
-                        param_info['required'] = False
-                        
-                        # If default value is False, assign to switches..
-                        if param_info['type'] == 'bool' and param_info['default'] is False:
-                            param_info['group'] = 'switch'
-                        # ..otherwise assign to optionals.
-                        else:
-                            param_info['group'] = 'optional'
-                        
-                    # ..otherwise, assign to positional parameters.
-                    else:
-                        param_info['group'] = 'positional'
-                    
-                    # If this for input/output, change to IO parameter..
-                    if param_name in param2channel:
-                        
-                        channel = param2channel[param_name]
-                        
-                        # Set parameter metavariable and flag.
-                        param_info['metavar'] = iop_info[channel][param_name]['metavar']
-                        param_info['flag'] = iop_info[channel][param_name]['flag']
-                        
-                        # Input/output parameters are treated as optionals. If
-                        # parameter was positional, set default value, using 
-                        # standard input or output where appropriate.
-                        if param_info['group'] == 'positional':
-                            
-                            iop = param2iop[param_name]
-                            
-                            if iop == 'indexed' and iop_info[channel][param_name]['index'] == 1:
-                                param_info['required'] = False
-                                param_info['default'] = '-'
-                            elif iop == 'listed':
-                                param_info['required'] = False
-                                param_info['default'] = ['-']
-                            elif iop == 'single':
-                                param_info['required'] = False
-                                param_info['default'] = '-'
-                            else:
-                                param_info['required'] = True
-                                param_info['default'] = None
-                        
-                        # Mark as IO parameter.
-                        param_info['group'] = 'IO'
-                        
-                    # ..otherwise if parameter has a short form, convert to short form..
-                    elif param_name in _info['short_params']:
-                        
-                        # Check that this is not a compound type.
-                        if _gtypes[ param_info['type'] ].is_compound: 
-                            raise TypeError("cannot create short-form parameter {!r} of type {}".format(
-                                param_name, param_info['type']))
-                        
-                        # Set flag to short form.
-                        param_info['flag'] = _info['short_params'][param_name]['flag']
-                        
-                        # Check parameter type matches that of short-form.
-                        if param_info['type'] != _info['short_params'][param_name]['type']:
-                            raise TypeError("{} has type mismatch for short-form parameter {!r}".format(
-                                func_info['name'], param_name))
-                        
-                        # Short form parameters are treated as optionals.
-                        # If parameter was positional, set as required.
-                        if param_info['group'] == 'positional':
-                            param_info['required'] = True
-                            param_info['default'] = None
-                            
-                        try: # Check parameter default matches that of short-form.
-                            assert param_info['default'] == _info['short_params'][param_name]['default']
-                        except AssertionError:
-                            raise ValueError("{} has default value mismatch for short-form parameter {!r}".format(
-                                func_info['name'], param_name))
-                        except KeyError:
-                            pass
-                        
-                        try: # Check parameter requirement matches that of short-form.
-                            assert param_info['required'] == _info['short_params'][param_name]['required']
-                        except AssertionError:
-                            raise ValueError("{} has requirement mismatch for short-form parameter {!r}".format(
-                                func_info['name'], param_name))
-                        except KeyError:
-                            pass
-                        
-                        # Mark as short form optional.
-                        param_info['group'] = 'short'
-                    
-                    # ..otherwise if parameter is of a compound type, create
-                    # two (mutually exclusive) parameters: one to accept argument
-                    # as a string, the other to load it from a file..
-                    elif _gtypes[ param_info['type'] ].is_compound:
-                        
-                        # Compound parameters are treated as optionals.
-                        # If parameter was positional, set as required.
-                        if param_info['group'] == 'positional':
-                            param_info['required'] = True
-                            param_info['default'] = None
-                        
-                        # Mark as 'compound'.
-                        param_info['group'] = 'compound'
-                        
-                        # Set compound parameter title.
-                        param_info['title'] = '{} argument'.format( param_name.replace('_', '-') )
-                        
-                        # If parameter is of a ductile type, set flag for 
-                        # it to be passed directly on the command line.
-                        if _gtypes[ param_info['type'] ].is_ductile:
-                            param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
-                        
-                        # Set file parameter name.
-                        param_info['file_dest'] = '{}_file'.format(param_name)
-                        
-                        # Set flag for parameter to be passed as a file.
-                        param_info['file_flag'] = file_flag = '--{}-file'.format( param_name.replace('_', '-') )
-                        
-                        # Check that file option string does
-                        # not conflict with existing options.
-                        if file_flag in flag2param:
-                            raise ValueError("file flag of {} parameter {!r} conflicts with {!r}".format(
-                                func_info['name'], param_name, flag2param[file_flag]))
-                        flag2param[file_flag] = '{} file flag'.format(param_name)
-                        
-                    # ..otherwise if option or switch, 
-                    # create flag from parameter name.
-                    elif param_info['group'] in ('optional', 'switch'):
-                        
-                        if len(param_name) > 1:
-                            param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
-                        else:
-                            param_info['flag'] = '-{}'.format(param_name)
-                     
-                    # Append info to argument description as appropriate.
-                    if param_info['group'] != 'positional':
-                        if param_info['default'] is not None:
-                            if param_info['group'] != 'switch' and not 'docstring-default' in param_info:
-                                param_info['description'] = '{} [default: {!r}]'.format(
-                                    param_info['description'], param_info['default'])
-                        elif param_info['required']:
-                            param_info['description'] = '{} [required]'.format(
-                                param_info['description'])
-                    
-                    try: # Delete docstring default - no longer needed.
-                        del param_info['docstring-default']
-                    except KeyError:
-                        pass
-                    
-                    # Check for conflicting option strings.
-                    if 'flag' in param_info:
-                        flag = param_info['flag']
-                        if flag in flag2param:
-                            raise ValueError("flag of {} parameter {!r} conflicts with {!r}".format(
-                                func_info['name'], param_name, flag2param[flag]))
-                        flag2param[flag] = param_name
-                    
-                    # Update parameter info.
-                    func_info['params'][param_name] = param_info
-                    
-            # ..otherwise, check that no parameters were defined.
-            elif len(param_names) > 0:
-                raise ValueError("{} parameters defined but not documented ~ {!r}".format(
-                    func_info['name'], param_names))
-            
-            # Update command info.
-            cmd_info[command][qualifier] = func_info
-    
-    # Ensure data directory exists.
-    data_dir = os.path.join('gactutil', 'data')
-    if not os.path.isdir(data_dir):
-        os.makedirs(data_dir)
-    
-    # Write command info.
-    cmd_file = os.path.join(data_dir, 'gaction.yaml')
-    with open(cmd_file, 'w') as fh:
-        dump(cmd_info, fh, default_flow_style=False)
-
-################################################################################
 
 def _validate_delimitable(x):
     """Validate delimitable object type."""
@@ -1602,65 +1777,11 @@ def _validate_ductile(x):
     elif not _gtypes[t].is_ductile:
         raise TypeError("{} is not ductile ~ {!r}".format(t, x))
 
-def _validate_param_type(x, type_name=None):
-    """Validate parameter object type."""
-    
-    t = _get_type_name(x)
-    
-    if type_name is not None and t != type_name:
-        raise TypeError("parameter type ({}) differs from that expected ({})".format(
-            t, type_name))
-    
-    if t == 'string':
-        
-        _validate_ductile(x)
-        
-    elif t == 'dict':
-        
-        for key, value in x.items():
-            _validate_ductile(key)
-            _validate_ductile(value)
-        
-    elif t == 'list':
-        
-        for element in x:
-            _validate_ductile(element)
-        
-    elif not _gtypes[t].is_ductile:
-        raise TypeError("{} is not a valid parameter object ~ {!r}".format(t, x))
-    
-def _validate_return_type(x, type_name=None):
-    """Validate return value type."""
-    
-    t = _get_type_name(x)
-    
-    if type_name is not None and t != type_name:
-        raise TypeError("return value type ({}) differs from that expected ({})".format(
-            t, type_name))
-    
-    if t == 'string':
-        
-        _validate_ductile(x)
-        
-    elif t == 'dict':
-        
-        for key, value in x.items():
-            _validate_ductile(key)
-            _validate_ductile(value)
-        
-    elif t == 'list':
-        
-        try:
-            for element in x:
-                _validate_ductile(element)
-        except (TypeError, ValueError):
-            for element in x:
-                _validate_delimitable(element)
-    
-    elif t not in _gtypes:
-        raise TypeError("{} is not a valid return value object ~ {!r}".format(t, x))
-
 ################################################################################
+
+def gactfunc(function):
+    """Gactfunc decorator function."""
+    return _Gactfunc(function)
 
 def gaction(argv=None):
     """Run gaction command."""
@@ -1668,11 +1789,13 @@ def gaction(argv=None):
     if argv is None:
         argv = sys.argv[1:]
     
-    ap = _prep_argparser()
+    gf = _GactfuncCollection()
+    
+    ap = gf.prep_argparser()
     
     args = ap.parse_args(argv)
     
-    function, args, retfile = _proc_args(args)
+    function, args, retfile = gf.proc_args(args)
     
     result = function( **vars(args) )
     
