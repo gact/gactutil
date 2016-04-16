@@ -991,14 +991,14 @@ class _GactfuncCollection(object):
         # Dump gactfunc collection info.
         gaction_file = os.path.join(data_dir, 'gaction.yaml')
         with open(gaction_file, 'w') as fh:
-            yaml.dump(self._data, fh)
+            dump(self._data, fh)
         
     def load(self):
         """Load gactfunc collection info."""
         gaction_file = os.path.join('data', 'gaction.yaml')
         gaction_path = resource_filename('gactutil', gaction_file)
         with open(gaction_path, 'r') as fh:
-            self._data = yaml.load(fh)
+            self._data = load(fh)
     
     def populate(self):
         """Populate gactfunc collection from GACTutil package modules.
