@@ -8,7 +8,7 @@ from gactutil import TextReader
 from gactutil.gaction import gactfunc
 
 @gactfunc
-def get_fasta(infile):
+def get_fasta_headers(infile):
     """Get FASTA headers.
     
     Args:
