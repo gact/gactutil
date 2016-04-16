@@ -40,6 +40,9 @@ from gactutil import TextWriter
 
 ################################################################################
 
+# Named tuple for specification of gactfunc info.
+_GactfuncSpec = namedtuple('_GactfuncSpec', ['module', 'function'])
+
 # Named tuple for specification of gactfunc parameter/return types.
 _GFTS = namedtuple('GFTS', [
     'name',           # Name of gactfunc data type.
@@ -1032,8 +1035,7 @@ class _GactfuncCollection(object):
                     func_name = x.__name__
                     if func_name in func_spec_info:
                         raise RuntimeError("conflicting gactfunc name ~ {!r}".format(func_name))
-                    func_spec_info[func_name] = OrderedDict([ ('module_name', mod_name),
-                        ('function_name', func_name) ])
+                    func_spec_info[func_name] = _GactfuncSpec(mod_name, func_name)
                     gactfuncs.append(x)
         
         # Populate multi-level dictionary of gactfunc specs, so that
@@ -1116,8 +1118,8 @@ class _GactfuncCollection(object):
             if func_spec is not None:
                 
                 # Get function definition.
-                module = import_module(func_spec['module_name'])
-                function = getattr(module, func_spec['function_name'])
+                module = import_module(func_spec.module)
+                function = getattr(module, func_spec.function)
                 
                 # Set gactfunc summary.
                 cap.summary = function.ap_spec['summary']
@@ -1308,7 +1310,7 @@ class _GactfuncCollection(object):
             checked.append(x)
             
             # If this is a function specification, return that..
-            if isinstance(x, OrderedDict):
+            if isinstance(x, _GactfuncSpec):
                 
                 # Set function info.
                 func_spec = x
