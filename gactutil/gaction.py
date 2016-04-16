@@ -198,7 +198,7 @@ class _Gactfunc(object):
     """A gactfunc wrapper class."""
     
     @staticmethod
-    def _parse_gactfunc_docstring(function):
+    def _parse_function_docstring(function):
         """Parse gactfunc docstring.
         
         This function parses a gactfunc docstring and returns an ordered
@@ -456,7 +456,7 @@ class _Gactfunc(object):
         return doc_info
     
     @staticmethod
-    def _parse_gactfunc_name(function):
+    def _parse_function_name(function):
         """Parse gactfunc name."""
         
         # Get function name.
