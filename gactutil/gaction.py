@@ -549,7 +549,7 @@ class _Gactfunc(object):
         self.ap_spec = OrderedDict()
         
         # Get commands from function name.
-        self.commands = self._parse_gactfunc_name(function)
+        self.commands = self._parse_function_name(function)
         
         # Get function parameter spec.
         param_spec = getargspec(function)
@@ -571,7 +571,7 @@ class _Gactfunc(object):
             spec_def_info = None
         
         # Set docstring info from gactfunc docstring.
-        doc_info = self._parse_gactfunc_docstring(function)
+        doc_info = self._parse_function_docstring(function)
         
         # Check that gactfunc has been documented.
         if doc_info is None:
