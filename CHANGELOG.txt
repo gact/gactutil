@@ -1,5 +1,0 @@
-
-2016-03-15  Thomas Walsh  <tw164@le.ac.uk>
-
-    * GACTutil: initial version.
-
