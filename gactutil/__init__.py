@@ -4,6 +4,7 @@
 
 from abc import ABCMeta
 from binascii import hexlify
+from collections import Mapping
 from contextlib import contextmanager
 import errno
 from gzip import GzipFile
@@ -43,6 +44,50 @@ _info = {
 }
 
 ################################################################################
+
+class FrozenDict(Mapping):
+    """Class for immutable and hashable dictionaries.
+    
+    A FrozenDict can be created and accessed in the same way as
+    a Python dict object, but cannot be modified after creation. 
+    """
+    
+    def __init__(self, *args, **kwargs):
+        """Init object."""
+        self._dict = dict(*args, **kwargs)
+        self._hash = hash( frozenset( self._dict.items() ) )
+    
+    def __delattr__(self, name):
+        """Delete attribute. Blocked after instantiation."""
+        raise TypeError("{} object does not support attribute deletion".format(
+            self.__class__.__name__))
+    
+    def __hash__(self):
+        """Return hash of object."""
+        return self._hash
+    
+    def __getitem__(self, key):
+        """Get object item."""
+        return self._dict.__getitem__(key)
+    
+    def __iter__(self):
+        """Get iterator over object."""
+        return self._dict.__iter__()
+    
+    def __len__(self):
+        """Get object length."""
+        return self._dict.__len__()
+        
+    def __repr__(self):
+        """Get object representation."""
+        return '{}({})'.format(self.__class__.__name__, self._dict.__repr__()[1:-1])
+    
+    def __setattr__(self, name, value):
+        """Set attribute. Blocked after instantiation."""
+        if hasattr(self, '_hash'):
+            raise TypeError("{} object does not support attribute assignment".format(
+                self.__class__.__name__))
+        self.__dict__[name] = value
 
 class TextRW(object):  
     """Abstract text reader/writer base class."""
