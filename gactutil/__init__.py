@@ -922,7 +922,7 @@ def resolve_paths(paths, start=None):
     return resolved_paths
 
 @contextmanager
-def TemporaryDirectory(suffix='', prefix='tmp', name=None, dir=None,
+def temporary_directory(suffix='', prefix='tmp', name=None, dir=None,
     delete=True):
     """Create temporary directory."""
     

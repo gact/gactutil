@@ -22,7 +22,7 @@ from yaml import YAMLError
 from gactutil.gaction import gactfunc
 from gactutil.ncbi import check_efetch
 from gactutil import TextReader
-from gactutil import TemporaryDirectory
+from gactutil import temporary_directory
 
 ################################################################################
 
@@ -633,7 +633,7 @@ def prep_genome(path, email=None):
     header_comments = '\n'.join([header_comments, additional_comments])
     
     # Get serialised annotation data.
-    with TemporaryDirectory() as twd:
+    with temporary_directory() as twd:
         
         annotation_temp = os.path.join(twd, 'annotation.tmp')
         
