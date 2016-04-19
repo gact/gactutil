@@ -8,6 +8,7 @@ from argparse import FileType
 from argparse import RawDescriptionHelpFormatter
 from argparse import REMAINDER
 from collections import deque
+from collections import MutableMapping
 from collections import namedtuple
 from collections import OrderedDict
 from imp import load_source
@@ -973,13 +974,77 @@ class _Gactfunc(object):
         """Call gactfunc wrapper."""
         return self.function(*args, **kwargs)
 
-class _GactfuncCollection(object):
+class _GactfuncCollection(MutableMapping):
     """A gactfunc collection class."""
     
     def __init__(self):
         """Init gactfunc collection."""
         self._data = dict()
         
+    def __delitem__(self, key):
+        raise TypeError("{} object does not support item deletion".format(
+            self.__class__.__name__))
+        
+    def __getitem__(self, commands):
+        
+        # Ensure variable 'commands' is a non-empty tuple of strings.
+        if isinstance(commands, basestring):
+            commands = (commands,)
+        elif not isinstance(commands, tuple) or len(commands) == 0 or not all(
+            isinstance(x, basestring) for x in commands ):
+            raise TypeError("invalid {} item key {!r}".format(
+                self.__class__.__name__, commands))
+        
+        try: # Get object indexed by the sequence of commands.
+            d = self._data
+            for cmd in commands[:-1]:
+                d = d[cmd]._data
+            value = d[ commands[-1] ]
+        except KeyError:
+            raise RuntimeError("failed to get {} item for commands ~ {!r}".format(
+                self.__class__.__name__, ' '.join(commands)))
+        
+        return value
+        
+    def __iter__(self):
+        return self._data.__iter__()
+        
+    def __len__(self):
+        return self._data.__len__()
+        
+    def __repr__(self):
+        name = self.__class__.__name__
+        data = ', '.join([ '{!r}: {!r}'.format(k, self[k]) for k in self.keys() ])
+        return '{}({})'.format(name, data)
+        
+    def __setitem__(self, commands, value):
+        
+        # Ensure variable 'commands' is a non-empty tuple of strings.
+        if isinstance(commands, basestring):
+            commands = (commands,)
+        elif not isinstance(commands, tuple) or len(commands) == 0 or not all(
+            isinstance(x, basestring) for x in commands ):
+            raise TypeError("invalid {} item key {!r}".format(
+                self.__class__.__name__, commands))
+        
+        if not isinstance(value, (_GactfuncCollection, _GactfuncSpec)):
+            raise TypeError("{} object does not support values of type {}".format(
+                self.__class__.__name__, type(value).__name__))
+        
+        try: # Set value of object indexed by the sequence of commands.
+            d = self._data
+            for cmd in commands[:-1]:
+                if cmd in d:
+                    assert isinstance(d[cmd], _GactfuncCollection)
+                else:
+                    d[cmd] = _GactfuncCollection()
+                d = d[cmd]._data
+            assert commands[-1] not in d
+            d[ commands[-1] ] = value
+        except AssertionError:
+            raise RuntimeError("failed to set gactfunc collection item for commands ~ {!r}".format(
+                ' '.join(commands)))
+       
     def dump(self):
         """Dump gactfunc collection info."""
         
@@ -991,14 +1056,27 @@ class _GactfuncCollection(object):
         # Dump gactfunc collection info.
         gaction_file = os.path.join(data_dir, 'gaction.yaml')
         with open(gaction_file, 'w') as fh:
-            dump(self._data, fh)
+            dump(self, fh)
+        
+    def func_specs(self):
+        """Generate leaves of gactfunc command tree.
+        
+        Yields:
+            _GactfuncSpec: Named tuple containing information about an
+                           individual gactfunc.
+        """
+        for _, _, func_spec in self.walk():
+            if func_spec is not None:
+                yield func_spec
         
     def load(self):
         """Load gactfunc collection info."""
+        
+        # Load gactfunc collection info.
         gaction_file = os.path.join('data', 'gaction.yaml')
         gaction_path = resource_filename('gactutil', gaction_file)
         with open(gaction_path, 'r') as fh:
-            self._data = load(fh)
+            self = load(fh)
     
     def populate(self):
         """Populate gactfunc collection from GACTutil package modules.
@@ -1023,38 +1101,32 @@ class _GactfuncCollection(object):
                 if f != '__init__.py' else prefix for f in mod_files ]
             mod_info.update( { name: path for name, path in zip(mod_names, mod_paths) } )
         
-        # With module info, create listing of all _Gactfunc instances (i.e. any
-        # functions with the @gactfunc decorator). Collect module and function
-        # name for each gactfunc instance. Check for conflicting gactfunc names.
-        gactfuncs = list()
-        func_spec_info = dict()
+        # Search GACTutil modules for _Gactfunc instances (i.e. any functions 
+        # with the @gactfunc decorator). Collect module and function name for 
+        # each gactfunc instance, while checking for conflicting gactfunc names.
+        func_names = set()
         for mod_name, mod_path in mod_info.items():
+            
+            # Skip modules in which gactfuncs should not be defined.
+            if mod_name in ('gactutil', 'gactutil.gaction'):
+                continue
+            
+            # Load module.
             module = load_source(mod_name, mod_path)
-            for k, x in getmembers(module):
-                if isinstance(x, _Gactfunc):
-                    func_name = x.__name__
-                    if func_name in func_spec_info:
-                        raise RuntimeError("conflicting gactfunc name ~ {!r}".format(func_name))
-                    func_spec_info[func_name] = _GactfuncSpec(mod_name, func_name)
-                    gactfuncs.append(x)
-        
-        # Populate multi-level dictionary of gactfunc specs, so that
-        # these can be accessed by the relevant sequence of commands,
-        # while checking for conflicting command sequences.
-        for function in gactfuncs:
-            try:
-                d = self._data
-                for cmd in function.commands[:-1]:
-                    if cmd in d:
-                        assert isinstance(d[cmd], dict)
-                    else:
-                        d[cmd] = dict()
-                    d = d[cmd]
-                assert function.commands[-1] not in d
-                d[ function.commands[-1] ] = func_spec_info[function.__name__]
-            except AssertionError:
-                raise RuntimeError("{} has conflicting gactfunc commands ~ {!r}".format(
-                    function.__name__, ' '.join(function.commands)))
+            
+            # Check members of module for gactfunc instances.
+            for member_name, member in getmembers(module):
+                
+                # If this is a gactfunc, add its spec to gactfunc collection.
+                if isinstance(member, _Gactfunc):
+                    
+                    # Check for gactfunc naming conflicts.
+                    if member_name in func_names:
+                        raise RuntimeError("conflicting gactfunc name ~ {!r}".format(member_name))
+                    func_names.add(member_name)
+                    
+                    # Add gactfunc to collection.
+                    self[member.commands] = _GactfuncSpec(mod_name, member_name)
     
     def prep_argparser(self):
         """Prep command-line argument parser."""
@@ -1074,7 +1146,7 @@ class _GactfuncCollection(object):
         sp = ap.add_subparsers(title='commands')
         
         # Ensure gactfunc collection info loaded.
-        if len(self._data) == 0:
+        if len(self) == 0:
             self.load()
         
         # Init parser chain with main parser-subparser pair.
@@ -1284,12 +1356,11 @@ class _GactfuncCollection(object):
                    the current node in the gactfunc command tree, and matching
                    the commands input in the terminal; `subcommands` are the
                    subcommands available at this node; and `func_spec` gives
-                   information about a gactfunc, if accessible at the current
-                   node.
+                   information about a gactfunc, if defined at the current node.
         """
         
         # Init command stack from root of gactfunc command tree.
-        command_stack = [ (list(), self._data) ]
+        command_stack = [ (list(), self) ]
         
         # Init list of checked commands. This is used to handle the
         # (unlikely) event of a cycle in the gactfunc command tree.
@@ -1319,7 +1390,7 @@ class _GactfuncCollection(object):
                 subcommands = tuple()
                 
             # ..otherwise push subcommands onto command stack, and return those.
-            elif isinstance(x, dict):
+            elif isinstance(x, _GactfuncCollection):
                 
                 # Get subcommands in alphabetical order.
                 subcommands = tuple( sorted( x.keys() ) )
