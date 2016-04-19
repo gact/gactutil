@@ -22,6 +22,7 @@ from io import BytesIO
 import os
 from pandas import DataFrame
 from pandas import read_csv
+import pickle
 from pkg_resources import resource_filename
 import re
 import sys
@@ -1054,9 +1055,9 @@ class _GactfuncCollection(MutableMapping):
             os.makedirs(data_dir)
         
         # Dump gactfunc collection info.
-        gaction_file = os.path.join(data_dir, 'gaction.yaml')
+        gaction_file = os.path.join(data_dir, 'gfi.p')
         with open(gaction_file, 'w') as fh:
-            dump(self, fh)
+            pickle.dump(self, fh)
         
     def func_specs(self):
         """Generate leaves of gactfunc command tree.
@@ -1073,10 +1074,11 @@ class _GactfuncCollection(MutableMapping):
         """Load gactfunc collection info."""
         
         # Load gactfunc collection info.
-        gaction_file = os.path.join('data', 'gaction.yaml')
+        gaction_file = os.path.join('data', 'gfi.p')
         gaction_path = resource_filename('gactutil', gaction_file)
         with open(gaction_path, 'r') as fh:
-            self = load(fh)
+            loaded = pickle.load(fh)
+        self._data = loaded._data
     
     def populate(self):
         """Populate gactfunc collection from GACTutil package modules.
