@@ -124,6 +124,9 @@ class FrozenDict(Mapping):
         raise TypeError("{!r} object does not support attribute deletion".format(
             self.__class__.__name__))
     
+    def __eq__(self, other):
+        return isinstance(other, FrozenDict) and self._data == other._data
+    
     def __getitem__(self, key):
         return self._data.__getitem__(key)
     
@@ -135,7 +138,10 @@ class FrozenDict(Mapping):
     
     def __len__(self):
         return self._data.__len__()
-        
+    
+    def __ne__(self, other):
+        return not isinstance(other, FrozenDict) or self._data != other._data
+    
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self._data.__repr__()[1:-1])
     
@@ -296,6 +302,9 @@ class FrozenList(Sequence):
         raise TypeError("{!r} object does not support attribute deletion".format(
             self.__class__.__name__))
     
+    def __eq__(self, other):
+        return isinstance(other, FrozenList) and self._data == other._data
+    
     def __getitem__(self, index):
         return self._data[index]
     
@@ -304,6 +313,9 @@ class FrozenList(Sequence):
     
     def __len__(self):
         return len(self._data)
+    
+    def __ne__(self, other):
+        return not isinstance(other, FrozenList) or self._data != other._data
     
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self._data.__repr__()[1:-1])
