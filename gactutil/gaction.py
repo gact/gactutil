@@ -1430,6 +1430,10 @@ class _GactfuncCollection(MutableMapping):
         # Process each argument.
         for param_name in param_info:
             
+            # Skip return value, already done.
+            if param_name == 'retfile':
+                continue
+            
             # Assume argument is not to be loaded from file.
             filebound = False
             
