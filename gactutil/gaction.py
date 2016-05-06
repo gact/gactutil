@@ -259,6 +259,10 @@ class gactfunc(object):
         return deepcopy(self._data['param_spec'])
     
     @property
+    def params(self):
+        return self._data['param_spec'].keys()
+    
+    @property
     def return_spec(self):
         return deepcopy(self._data['return_spec'])
     
