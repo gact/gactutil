@@ -146,7 +146,7 @@ class FrozenDict(Mapping):
         return '{}({})'.format(self.__class__.__name__, self._data.__repr__()[1:-1])
     
     def __setattr__(self, key, value):
-        if hasattr(self, '_dict'):
+        if hasattr(self, '_data'):
             raise TypeError("{!r} object does not support attribute assignment".format(
                 self.__class__.__name__))
         self.__dict__[key] = value
@@ -321,7 +321,7 @@ class FrozenList(Sequence):
         return '{}({})'.format(self.__class__.__name__, self._data.__repr__()[1:-1])
     
     def __setattr__(self, index, value):
-        if hasattr(self, '_tuple'):
+        if hasattr(self, '_data'):
             raise TypeError("{!r} object does not support attribute assignment".format(
                 self.__class__.__name__))
         self.__dict__[index] = value
