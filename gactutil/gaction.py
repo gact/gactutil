@@ -1431,11 +1431,7 @@ class _GactfuncCollection(MutableMapping):
         param_info = function.ap_spec['params']
         
         # Process each argument.
-        for param_name in param_info:
-            
-            # Skip return value, already done.
-            if param_name == 'retfile':
-                continue
+        for param_name in function.params:
             
             # Assume argument is not to be loaded from file.
             filebound = False
