@@ -1427,7 +1427,7 @@ class _GactfuncCollection(MutableMapping):
         param_info = function.ap_spec['params']
         
         # Process each argument.
-        for param_name in args.__dict__.keys():
+        for param_name in param_info:
             
             # Assume argument is not to be loaded from file.
             filebound = False
