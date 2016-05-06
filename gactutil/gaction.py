@@ -100,6 +100,14 @@ _info = {
     # Null values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
     'na_values': ('null', 'Null', 'NULL'),
     
+    'reserved_params': frozenset([
+        'help',              # argparse help
+        'version',           # argparse version
+        'gactfunc_function', # gactfunc function name
+        'gactfunc_module',   # gactfunc module name
+        'retfile'            # return-value option name
+    ]),
+    
     # Input/output patterns.
     'iop': {
         
@@ -623,6 +631,12 @@ class gactfunc(object):
         # Get enumerated parameter names.
         param_names = arg_spec.args
         
+        # Check for reserved parameter names.
+        res_params = [ p for p in param_names if p in _info['reserved_params'] ]
+        if len(res_params) > 0:
+            raise ValueError("{} {!r} uses reserved parameter names ~ {!r}".format(
+                self.__class__.__name__, func_name, res_params))
+        
         # Map formal keyword parameters to their defaults.
         if arg_spec.defaults is not None:
             i = len(arg_spec.defaults)
@@ -858,26 +872,13 @@ class gactfunc(object):
             # Set special parameter name for return value.
             param_name = 'retfile'
             
-            # Check for conflicting function parameter.
-            if param_name in ap_spec['params']:
-                raise ValueError("{} return value command-line parameter conflicts with function parameter {!r}".format(
-                    self.__name__, param_name))
-            
-            # Get info on return-value IO pattern.
-            flag, metavar = [ _info['iop']['output']['returned'][k]
-                for k in ('flag', 'metavar') ]
-            
-            # Get docs on this return value.
-            return_type, description = [ self._data['return_spec'][k]
-                for k in ('type', 'description') ]
-            
             # Set parameter info for return-value option.
             ap_spec['params'][param_name] = {
                 'default': '-',
-                'description': description,
-                'flag': flag,
-                'metavar': metavar,
-                'type': return_type
+                'description': self._data['return_spec']['description'],
+                'flag': _info['iop']['output']['returned']['flag'],
+                'metavar': _info['iop']['output']['returned']['metavar'],
+                'type': self._data['return_spec']['type']
             }
             
             param2channel['retfile'] = 'output'
