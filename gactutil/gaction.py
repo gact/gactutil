@@ -2,11 +2,7 @@
 # -*- coding: utf-8 -*-
 """GACTutil command-line interface."""
 
-from argparse import ArgumentError
 from argparse import ArgumentParser
-from argparse import FileType
-from argparse import RawDescriptionHelpFormatter
-from argparse import REMAINDER
 from collections import deque
 from collections import MutableMapping
 from collections import namedtuple
@@ -30,8 +26,6 @@ import sys
 from textwrap import dedent
 from types import IntType
 from types import NoneType
-from yaml import dump
-from yaml import load
 from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
