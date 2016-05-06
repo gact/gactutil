@@ -849,15 +849,14 @@ class gactfunc(object):
 
     def _update_ap_spec(self):
         
-        # Init argparser spec.
-        ap_spec = OrderedDict()
-        
-        # Set argparser spec info from gactfunc.
-        ap_spec['commands'] = self._data['commands']
-        ap_spec['summary'] = self._data['summary']
-        ap_spec['description'] = self._data['description']
-        ap_spec['params'] = self._data['param_spec']
-        ap_spec['iop'] = self._data['iop']
+        # Set argparser spec info from deep copy of gactfunc info.
+        ap_spec = OrderedDict([
+            ('commands',       deepcopy(self._data['commands'])),
+            ('summary',         deepcopy(self._data['summary'])),
+            ('description', deepcopy(self._data['description'])),
+            ('params',       deepcopy(self._data['param_spec'])),
+            ('iop',                 deepcopy(self._data['iop']))
+        ])
         
         # Init input/output parameter mappings.
         param2channel = dict()
