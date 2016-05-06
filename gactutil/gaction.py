@@ -219,7 +219,7 @@ _info = {
 
 ################################################################################
 
-class _Gactfunc(object):
+class gactfunc(object):
     """A gactfunc wrapper class."""
     
     @property
@@ -687,7 +687,7 @@ class _Gactfunc(object):
                     # Check that the defined default value is of the
                     # type specified in the function documentation.
                     try:
-                        _Gactfunc._validate_param_type(default, type_name)
+                        gactfunc._validate_param_type(default, type_name)
                     except (TypeError, ValueError):
                         raise TypeError("{} definition has default type mismatch for parameter {!r}".format(
                             func_name, param_name))
@@ -1219,7 +1219,7 @@ class _GactfuncCollection(MutableMapping):
                 if f != '__init__.py' else prefix for f in mod_files ]
             mod_info.update( { name: path for name, path in zip(mod_names, mod_paths) } )
         
-        # Search GACTutil modules for _Gactfunc instances (i.e. any functions
+        # Search GACTutil modules for gactfunc instances (i.e. any functions
         # with the @gactfunc decorator). Create a function spec for each
         # gactfunc instance, while checking for conflicting gactfunc names.
         func_names = set()
@@ -1236,7 +1236,7 @@ class _GactfuncCollection(MutableMapping):
             for member_name, member in getmembers(module):
                 
                 # If this is a gactfunc, add its spec to gactfunc collection.
-                if isinstance(member, _Gactfunc):
+                if isinstance(member, gactfunc):
                     
                     # Check for gactfunc naming conflicts.
                     if member_name in func_names:
@@ -1618,7 +1618,7 @@ def _dict_from_file(f):
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
     
-    _Gactfunc._validate_param_type(x)
+    gactfunc._validate_param_type(x)
     
     return x
 
@@ -1637,7 +1637,7 @@ def _dict_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse dict from string ~ {!r}".format(s))
     
-    _Gactfunc._validate_param_type(x)
+    gactfunc._validate_param_type(x)
     
     return x
 
@@ -1745,7 +1745,7 @@ def _list_from_file(f):
         while len(x) > 0 and x[-1] is None:
             x.pop()
     
-    _Gactfunc._validate_param_type(x)
+    gactfunc._validate_param_type(x)
     
     return x
 
@@ -1764,7 +1764,7 @@ def _list_from_string(s):
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse list from string ~ {!r}".format(s))
     
-    _Gactfunc._validate_param_type(x)
+    gactfunc._validate_param_type(x)
     
     return x
 
@@ -1907,7 +1907,7 @@ def _string_from_file(f):
     """Get string from file."""
     with TextReader(f) as fh:
         s = fh.read().rstrip()
-    _Gactfunc._validate_param_type(s)
+    gactfunc._validate_param_type(s)
     return s
 
 def _string_to_file(s, f):
@@ -1963,10 +1963,6 @@ def _validate_ductile(x):
         raise TypeError("{} is not ductile ~ {!r}".format(t, x))
 
 ################################################################################
-
-def gactfunc(function):
-    """Gactfunc decorator function."""
-    return _Gactfunc(function)
 
 def gaction(argv=None):
     """Run gaction command."""
