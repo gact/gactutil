@@ -538,7 +538,7 @@ class TextReader(TextRW):
             
             # Start with empty buffer; sampled bytes
             # already passed to GZIP temp file.
-            self._buffer = ''
+            self._buffer = u''
         
         # ..otherwise read input as text.
         else:
@@ -578,7 +578,7 @@ class TextReader(TextRW):
                 
             try:
                 # Read line from input stream into buffer.
-                self._buffer = '{}{}'.format(self._buffer, next(self._handle))
+                self._buffer = u'{}{}'.format(self._buffer, next(self._handle))
                 
                 # Get next line from buffer.
                 line, self._buffer = self._buffer.split('\n', 1)
@@ -607,7 +607,7 @@ class TextReader(TextRW):
         
         # EOF
         if self._buffer is None:
-            return ''
+            return u''
         
         # Read from file while size limit not reached.
         while size is None or len(self._buffer) < size:
@@ -634,7 +634,7 @@ class TextReader(TextRW):
         
         # EOF
         if self._buffer is None:
-            return ''
+            return u''
         
         try:
             # Get next line from buffer.
@@ -644,7 +644,7 @@ class TextReader(TextRW):
                 
             try:
                 # Read line from input stream into buffer.
-                self._buffer += '{}{}'.format(self._buffer, next(self._handle))
+                self._buffer += u'{}{}'.format(self._buffer, next(self._handle))
                 
                 # Get next line from buffer.
                 line, self._buffer = self._buffer.split('\n', 1)
@@ -658,7 +658,7 @@ class TextReader(TextRW):
         # length, then push excess back to buffer.
         if size is not None and len(line) > size:
             line, excess = line[:size], line[size:]
-            self._buffer = '{}{}'.format(excess, self._buffer)
+            self._buffer = u'{}{}'.format(excess, self._buffer)
         
         return line
     
@@ -685,7 +685,7 @@ class TextReader(TextRW):
         # If size hint is specified and within the extent of the buffer,
         # set buffer to empty string to prepare for any subsequent lines..
         if sizehint is not None and sizehint <= len(self._buffer):
-            self._buffer = ''
+            self._buffer = u''
         # ..otherwise flag EOF.
         else:
             self._buffer = None
