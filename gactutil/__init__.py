@@ -682,15 +682,24 @@ class TextReader(TextRW):
         if self._buffer is None:
             return []
         
-        # Read from file while size hint limit not reached.
-        while sizehint is None or len(self._buffer) < sizehint:
-            try:
-                self._buffer += next(self._handle)
-            except StopIteration:
-                break
+        # Ensure buffer ends with complete line.
+        self._buffer += next(self._handle)
         
         # Split buffer into lines.
-        lines = self._buffer.splitlines(keepends=True)
+        # NB: buffer is bypassed for remainder of method.
+        lines = self._buffer.splitlines(True)
+        
+        # Get sum of line lengths.
+        length_of_lines = sum( len(line) for line in lines )
+        
+        # Read from file while size hint limit not reached.
+        while sizehint is None or len(length_of_lines) < sizehint:
+            try:
+                line = next(self._handle)
+                length_of_lines += len(line)
+                lines.append(line)
+            except StopIteration:
+                break
         
         # If size hint is specified and within the extent of the buffer,
         # set buffer to empty string to prepare for any subsequent lines..
