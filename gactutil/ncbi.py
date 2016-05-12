@@ -36,7 +36,7 @@ def check_efetch(**kwargs):
     
     # Set Entrez email attribute from argument or setting.
     try:
-        email = kwargs.pop('email')
+        Entrez.email = kwargs.pop('email')
     except KeyError:
         try:
             Entrez.email = _read_setting('email')
@@ -81,7 +81,7 @@ def check_esearch(**kwargs):
     
     # Set Entrez email attribute from argument or setting.
     try:
-        email = kwargs.pop('email')
+        Entrez.email = kwargs.pop('email')
     except KeyError:
         try: 
             Entrez.email = _read_setting('email')
