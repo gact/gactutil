@@ -211,13 +211,20 @@ class GenomeIndex(object):
             if x != GenomeIndex.filename ]
         file_paths = [ x for x in item_paths if os.path.isfile(x) ]
         
-        # If index doesn't exist or is older than any other file, update index..
-        if not isfile(index_path) or any( getmtime(x) > getmtime(index_path) 
-            for x in file_paths ):
-            self.update(directory)
-        # ..otherwise load existing index.
-        else:
+        # If index already exists, load it and count any
+        # previously-indexed files that are missing.
+        if os.path.isfile(index_path):
             self.load(directory)
+            indexed_paths = [ os.path.join(directory, x)
+                for x in self._data['files'].values() ]
+            num_missing = sum([ int( not os.path.isfile(x) )
+                for x in indexed_paths ])
+        
+        # Update index if not found, or if there are newer files,
+        # or if any previously-indexed files are missing.
+        if ( not isfile(index_path) or num_missing > 0 or
+            any( getmtime(x) > getmtime(index_path) for x in file_paths ) ):
+            self.update(directory)
         
     def dump(self, directory):
         """Dump genome index to genome directory.
