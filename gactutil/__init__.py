@@ -571,8 +571,12 @@ class TextReader(TextRW):
             raise StopIteration
         
         try: 
+            
+            # Get EOL index in buffer.
+            i = self._buffer.index('\n') + 1
+            
             # Get next line from buffer.
-            line, self._buffer = self._buffer.split('\n', 1)
+            line, self._buffer = self._buffer[:i], self._buffer[i:]
             
         except ValueError: # Buffer lacks newline.
                 
@@ -580,13 +584,19 @@ class TextReader(TextRW):
                 # Read line from input stream into buffer.
                 self._buffer = u'{}{}'.format(self._buffer, next(self._handle))
                 
+                # Get EOL index in buffer.
+                i = self._buffer.index('\n') + 1
+                
                 # Get next line from buffer.
-                line, self._buffer = self._buffer.split('\n', 1)
+                line, self._buffer = self._buffer[:i], self._buffer[i:]
                 
             except (StopIteration, ValueError): # EOF
                 
                 # Get last line, flag EOF.
                 line, self._buffer = self._buffer, None
+                
+                if line == '':
+                    raise StopIteration
         
         return line
     
@@ -689,7 +699,7 @@ class TextReader(TextRW):
         # ..otherwise flag EOF.
         else:
             self._buffer = None
-         
+        
         return lines
 
 class TextWriter(TextRW):
