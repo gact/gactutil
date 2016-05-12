@@ -455,14 +455,14 @@ def prep_genome(directory, email=None):
     annotation file. These prepped files will have consistent reference sequence 
     names and are suitable as input for downstream bioinformatics analysis.
 
-    Several changes are made to the genome sequence and annotation files:
+    Several changes are made to the reference sequence and annotation files:
 
      * The reference sequence FASTA file is given the extension '.fa', which is 
        more commonly used, and is required by some software (e.g. Picard).
 
      * Each reference sequence is assigned to a chromosome if possible, and
        renamed to improve readability. If a reference sequence is a chromosome, 
-       its name is changed to a normalised representation (e.g. 'chrI'). 
+       its name is changed to a normalised representation (e.g. 'chr01').
        Otherwise, if a reference sequence ID contains a GI number, this is used 
        to query NCBI for the name of the sequence and its corresponding 
        chromosome. In such cases, the new sequence name is concatenated with the 
