@@ -192,6 +192,11 @@ _info = {
     # the corresponding flag by '_setup_commands'.
     'short_params': {
         
+        'directory': {
+            'flag': '-d',
+            'type': 'string'
+        },
+        
         'threads': {
             'default': 1,
             'flag': '-t',
