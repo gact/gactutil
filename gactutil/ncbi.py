@@ -36,12 +36,15 @@ def check_efetch(**kwargs):
     
     # Set Entrez email attribute from argument or setting.
     try:
-        Entrez.email = kwargs.pop('email')
-    except KeyError:
+        email = kwargs.pop('email')
+        assert isinstance(email, basestring)
+    except (AssertionError, KeyError):
         try:
-            Entrez.email = _read_setting('email')
-        except RuntimeError:
+            email = _read_setting('email')
+            assert isinstance(email, basestring)
+        except (AssertionError, RuntimeError):
             raise RuntimeError("Entrez efetch failed - please provide an email address")
+    Entrez.email = email
     
     # Do NCBI efetch.
     while attempts < max_attempts:
@@ -81,12 +84,15 @@ def check_esearch(**kwargs):
     
     # Set Entrez email attribute from argument or setting.
     try:
-        Entrez.email = kwargs.pop('email')
-    except KeyError:
+        email = kwargs.pop('email')
+        assert isinstance(email, basestring)
+    except (AssertionError, KeyError):
         try: 
-            Entrez.email = _read_setting('email')
-        except RuntimeError:
+            email = _read_setting('email')
+            assert isinstance(email, basestring)
+        except (AssertionError, RuntimeError):
             raise RuntimeError("Entrez esearch failed - please provide an email address")
+    Entrez.email = email
     
     # Do NCBI esearch.
     while attempts < max_attempts:
