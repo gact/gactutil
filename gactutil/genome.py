@@ -109,7 +109,7 @@ class GenomeIndex(object):
             'README': re.compile('^([^.]+)[.]README$'),
             
             # Captures: <strain>_<ID>
-            'prepped-genome': re.compile('^SGD_([^_]+)_([^_]+)[.]fa$'),
+            'prepped-reference': re.compile('^SGD_([^_]+)_([^_]+)[.]fa$'),
             
             # Captures: <strain>_<ID>
             'prepped-annotation': re.compile('^SGD_([^_]+)_([^_]+)[.]gff$'),
@@ -123,7 +123,7 @@ class GenomeIndex(object):
             'gene-association': re.compile('^gene_association_((R\d+-\d+-\d+)_(\d{8}))[.]sgd$'),
             
             # Captures: <version>_<date>
-            'genome': re.compile('^(S288C)_reference_sequence_((R\d+-\d+-\d+)_(\d{8}))[.]fsa$'),
+            'reference': re.compile('^(S288C)_reference_sequence_((R\d+-\d+-\d+)_(\d{8}))[.]fsa$'),
             
             # Captures: <version>_<date>
             'annotation': re.compile('^saccharomyces_cerevisiae_((R\d+-\d+-\d+)_(\d{8}))[.]gff$'),
@@ -147,7 +147,7 @@ class GenomeIndex(object):
             'coding-sequence': re.compile('^([^_]+)_([^_]+)_cds[.]fsa(?:[.]gz)?$'),
             
              # Captures: <strain>_<institution>_<year>_<ID>
-            'genome': re.compile('^([^_]+)_([^_]+)_([^_]+)_([^_]+)[.]fsa(?:[.]gz)?$'),
+            'reference': re.compile('^([^_]+)_([^_]+)_([^_]+)_([^_]+)[.]fsa(?:[.]gz)?$'),
             
             # Captures: <strain>_<ID>
             'annotation': re.compile('^([^_]+)_([^_]+)[.]gff(?:[.]gz)?$'),
@@ -170,14 +170,14 @@ class GenomeIndex(object):
         'info': ('date', 'name', 'ID', 'institution', 'strain'),
         
         # Files in genome.
-        'files': ('annotation', 'coding-sequence', 'gene-association', 'genome', 
+        'files': ('annotation', 'coding-sequence', 'gene-association', 'reference', 
             'indel', 'non-feature', 'other-feature', 'peptide-sequence', 'snp',
-            'prepped-annotation', 'prepped-genome', 'README', 'rna-sequence')
+            'prepped-annotation', 'prepped-reference', 'README', 'rna-sequence')
     }
     
     filename = 'index.yaml'
     
-    required = ('genome', 'annotation')
+    required = ('reference', 'annotation')
     
     @classmethod
     def _get_index_path(cls, path):
@@ -305,7 +305,7 @@ class GenomeIndex(object):
         # Update genome info.
         if genome_type == 'S288C':
             
-            genome_match = gmatch['S288C']['genome']
+            genome_match = gmatch['S288C']['reference']
             self._data['info']['strain'] = genome_match.group(1)
             self._data['info']['institution'] = 'SGD'
             self._data['info']['ID'] = genome_match.group(3)
@@ -313,7 +313,7 @@ class GenomeIndex(object):
         
         elif genome_type == 'NON-S288C':
             
-            genome_match = gmatch['NON-S288C']['genome']
+            genome_match = gmatch['NON-S288C']['reference']
             self._data['info']['strain'] = genome_match.group(1)
             self._data['info']['institution'] = genome_match.group(2)
             self._data['info']['ID'] = genome_match.group(4)
