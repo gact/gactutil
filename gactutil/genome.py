@@ -28,51 +28,52 @@ from gactutil import temporary_directory
 
 _info = {
 
-    # A normalised representations of yeast chromosomes. For the most part
-    # these reflect the nomenclature in use by SGD as of March 2016.
+    # Normalised representations of yeast chromosomes. These
+    # were chosen to sort consistently in most circumstances.
     'norm_chr': (
-      'chrI',
-      'chrII',
-      'chrIII',
-      'chrIV',
-      'chrV',    
-      'chrVI',   
-      'chrVII',
-      'chrVIII',
-      'chrIX',
-      'chrX',
-      'chrXI',
-      'chrXII',
-      'chrXIII',
-      'chrXIV',
-      'chrXV',
-      'chrXVI',
-      'chrM', 
-      '2micron'
+      'chr01',
+      'chr02',
+      'chr03',
+      'chr04',
+      'chr05',
+      'chr06',
+      'chr07',
+      'chr08',
+      'chr09',
+      'chr10',
+      'chr11',
+      'chr12',
+      'chr13',
+      'chr14',
+      'chr15',
+      'chr16',
+      'chr17',
+      'chr18'
     ),
     
-    # Mapping of chromosome labels to normalised representation. 
-    # NB: this assumes chromosome name simplification has been 
-    # done, and that the given chromosome has been uppercased.
+    # Mapping of chromosome labels to normalised representation.
+    # NB: this assumes chromosome name simplification has been
+    # done (removing any leading zeros), and that the given
+    # chromosome has been uppercased.
     'chr2norm': {
-      '1': 'chrI',      'I':    'chrI', 
-      '2': 'chrII',     'II':   'chrII',
-      '3': 'chrIII',    'III':  'chrIII',
-      '4': 'chrIV',     'IV':   'chrIV',
-      '5': 'chrV',      'V':    'chrV',
-      '6': 'chrVI',     'VI':   'chrVI',
-      '7': 'chrVII',    'VII':  'chrVII',
-      '8': 'chrVIII',   'VIII': 'chrVIII', 
-      '9': 'chrIX',     'IX':   'chrIX',
-      '10': 'chrX',     'X':    'chrX',
-      '11': 'chrXI',    'XI':   'chrXI',
-      '12': 'chrXII',   'XII':  'chrXII',
-      '13': 'chrXIII',  'XIII': 'chrXIII',
-      '14': 'chrXIV',   'XIV':  'chrXIV',
-      '15': 'chrXV',    'XV':   'chrXV',
-      '16': 'chrXVI',   'XVI':  'chrXVI',
-      '17': 'chrM',     'MT':   'chrM',    'MITO': 'chrM',
-      '2-micron': '2micron'
+      '1':  'chr01',     'I': 'chr01',
+      '2':  'chr02',    'II': 'chr02',
+      '3':  'chr03',   'III': 'chr03',
+      '4':  'chr04',    'IV': 'chr04',
+      '5':  'chr05',     'V': 'chr05',
+      '6':  'chr06',    'VI': 'chr06',
+      '7':  'chr07',   'VII': 'chr07',
+      '8':  'chr08',  'VIII': 'chr08',
+      '9':  'chr09',    'IX': 'chr09',
+      '10': 'chr10',     'X': 'chr10',
+      '11': 'chr11',    'XI': 'chr11',
+      '12': 'chr12',   'XII': 'chr12',
+      '13': 'chr13',  'XIII': 'chr13',
+      '14': 'chr14',   'XIV': 'chr14',
+      '15': 'chr15',    'XV': 'chr15',
+      '16': 'chr16',   'XVI': 'chr16',
+      '17': 'chr17',    'MT': 'chr17',  'MITO': 'chr17',
+      '2-MICRON': 'chr18', '2MICRON': 'chr18'
     },
     
     # Expected pattern of sequence identifiers beginning with a GI number.
@@ -337,7 +338,14 @@ class GenomeIndex(object):
 ################################################################################
 
 def _norm_chr(chromosome):
-    """Normalise chromosome name. (Returns None on failure.)"""
+    """Normalise chromosome name.
+    
+    Args:
+        chromosome (string): Chromosome name.
+    
+    Returns:
+        string: Normalised chromosome name. Returns None on failure.
+    """
     
     # This pattern is modelled on the method used by SnpEff to simplify 
     # chromosome names, as in the file 'ChromosomeSimpleName.java'. Prefixes of
