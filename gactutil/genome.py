@@ -195,44 +195,45 @@ class GenomeIndex(object):
         """dict: Dictionary of genome info."""
         return self._data['info']
         
-    def __init__(self, path):
+    def __init__(self, directory):
         """Init genome index.
         
         Args:
-            path (str): Path of genome directory.
+            directory (str): Path of genome directory.
         """
         
         # Get path of index file.
-        index_path = GenomeIndex._get_index_path(path)
+        index_path = GenomeIndex._get_index_path(directory)
         
         # Get paths to other files in genome directory.
-        item_paths = [ os.path.join(path, x) for x in os.listdir(path) 
+        item_paths = [ os.path.join(directory, x)
+            for x in os.listdir(directory)
             if x != GenomeIndex.filename ]
         file_paths = [ x for x in item_paths if os.path.isfile(x) ]
         
         # If index doesn't exist or is older than any other file, update index..
         if not isfile(index_path) or any( getmtime(x) > getmtime(index_path) 
             for x in file_paths ):
-            self.update(path)
+            self.update(directory)
         # ..otherwise load existing index.
         else:
-            self.load(path)
+            self.load(directory)
         
-    def dump(self, path):
+    def dump(self, directory):
         """Dump genome index to genome directory.
         
         Args:
-            path (str): Path of genome directory to which genome index 
+            directory (str): Path of genome directory to which genome index
                 will be dumped.
         """
         
-        index_path = GenomeIndex._get_index_path(path)
+        index_path = GenomeIndex._get_index_path(directory)
         
         try:
             with open(index_path, 'w') as fh:
                 safe_dump(self._data, fh, default_flow_style=False)
         except (IOError, YAMLError):
-            raise RuntimeError("failed to dump genome index to directory ~ {!r}".format(path))
+            raise RuntimeError("failed to dump genome index to directory ~ {!r}".format(directory))
     
     def load(self, path):
         """Load genome index from genome directory.
@@ -424,7 +425,7 @@ def _load_genome_readme(filepath):
 ################################################################################
 
 @gactfunc
-def index_genome(path):
+def index_genome(directory):
     """Index yeast genome data.
     
     This takes as input a directory containing genome assembly files downloaded 
@@ -432,13 +433,13 @@ def index_genome(path):
     the input directory and saves these to a genome index file in YAML format.
     
     Args:
-        path (string): Path to yeast genome data directory.
+        directory (string): Path to yeast genome data directory.
     """
-    gindex = GenomeIndex(path)
-    gindex.dump(path)
+    gindex = GenomeIndex(directory)
+    gindex.dump(directory)
 
 @gactfunc
-def prep_genome(path, email=None):
+def prep_genome(directory, email=None):
     """Prep yeast genome data.
     
     This takes as input a directory containing genome assembly files downloaded 
@@ -472,23 +473,23 @@ def prep_genome(path, email=None):
     be converted to GFF3 format before input to this script.
     
     Args:
-        path (string): Path to yeast genome data directory.
+        directory (string): Path to yeast genome data directory.
         email (string): Contact email for NCBI E-utilities.
     """
     
     # PROCESS ... ##############################################################
     
-    gindex = GenomeIndex(path)
+    gindex = GenomeIndex(directory)
     
     # Check annotation file found.
     if 'annotation' not in gindex.files:
         raise RuntimeError("cannot prep genome - annotation file not found")
     
     # Set output genome sequence file path.
-    sequence_file = os.path.join(path, '{}.fa'.format(gindex.info['name']))
+    sequence_file = os.path.join(directory, '{}.fa'.format(gindex.info['name']))
     
     # Set output genome annotation file path.
-    annotation_file = os.path.join(path, '{}.gff'.format(gindex.info['name']))
+    annotation_file = os.path.join(directory, '{}.gff'.format(gindex.info['name']))
     
     # Set sequence definition pattern.
     seq_def_pattern = re.compile("^Saccharomyces cerevisiae(?: strain)? (\S+)"
@@ -510,7 +511,7 @@ def prep_genome(path, email=None):
     
     # READ GFF FILE ############################################################
     
-    anno_path = os.path.join(path, gindex.files['annotation'])
+    anno_path = os.path.join(directory, gindex.files['annotation'])
     
     # Read GFF pragmas and comments.
     with TextReader(anno_path) as fh:
@@ -668,7 +669,7 @@ def prep_genome(path, email=None):
         for record in records:
             SeqIO.write(record, fh, 'fasta')
     
-    gindex.update(path)
-    gindex.dump(path)
+    gindex.update(directory)
+    gindex.dump(directory)
 
 ################################################################################
