@@ -181,9 +181,9 @@ class GenomeIndex(object):
     required = ('reference', 'annotation')
     
     @classmethod
-    def _get_index_path(cls, path):
+    def _get_index_path(cls, directory):
         """Get path of genome index from genome directory path."""
-        return os.path.join( os.path.normpath(path), GenomeIndex.filename )
+        return os.path.join( os.path.normpath(directory), GenomeIndex.filename )
         
     @property
     def files(self):
@@ -242,31 +242,31 @@ class GenomeIndex(object):
         except (IOError, YAMLError):
             raise RuntimeError("failed to dump genome index to directory ~ {!r}".format(directory))
     
-    def load(self, path):
+    def load(self, directory):
         """Load genome index from genome directory.
         
         Args:
-            path (str): Path of genome directory from which genome index 
+            directory (str): Path of genome directory from which genome index
                 will be loaded.
         """
         
-        index_path = GenomeIndex._get_index_path(path)
+        index_path = GenomeIndex._get_index_path(directory)
         
         try:
             with open(index_path, 'r') as fh:
                 self._data = safe_load(fh)
         except (IOError, YAMLError):
-            raise RuntimeError("failed to load genome index from directory ~ {!r}".format(path))
+            raise RuntimeError("failed to load genome index from directory ~ {!r}".format(directory))
         
-        if ( any( k not in GenomeIndex.tags for k in self._data ) or 
+        if ( any( k not in GenomeIndex.tags for k in self._data ) or
             any( a not in GenomeIndex.tags[k] for k in self._data for a in self._data[k] ) ):
-            raise RuntimeError("failed to load invalid genome index from directory ~ {!r}".format(path))
+            raise RuntimeError("failed to load invalid genome index from directory ~ {!r}".format(directory))
 
-    def update(self, path):
+    def update(self, directory):
         """Update genome index for given genome directory.
         
         Args:
-            path (str): Path of genome directory for which this genome index 
+            directory (str): Path of genome directory for which this genome index
                 will be updated.
         """
         
@@ -274,8 +274,8 @@ class GenomeIndex(object):
         self._data = { 'info': dict(), 'files': dict() }
         
         # Get list of files in genome directory.
-        files = [ x for x in os.listdir(path) 
-            if os.path.isfile( os.path.join(path, x) ) ]
+        files = [ x for x in os.listdir(directory)
+            if os.path.isfile( os.path.join(directory, x) ) ]
         
         # Match files against expected filename patterns.
         gmatch = { k: { f: set([ GenomeIndex.pattern[k][f].match(x) 
@@ -328,7 +328,7 @@ class GenomeIndex(object):
             self._data['info']['ID'] = genome_match.group(4)
             
             if 'README' in gmatch['COMMON']:
-                readme = _load_genome_readme( os.path.join(path, 
+                readme = _load_genome_readme( os.path.join(directory,
                     gmatch['COMMON']['README'].group(0)) )
                 self._data['info']['date'] = readme['date'].strftime('%Y%m%d')
             else:
