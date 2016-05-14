@@ -1473,7 +1473,7 @@ class _GactfuncCollection(MutableMapping):
             if arg is not None:
                 if filebound:
                     args.__dict__[param_name] = _object_from_file(arg, type_name)
-                else:
+                elif param_info[param_name]['group'] != 'switch':
                     args.__dict__[param_name] = _object_from_string(arg, type_name)
         
         return function, args, retfile
