@@ -84,7 +84,7 @@ class SvOnly(CategoricalFilter):
 ################################################################################
 
 @gactfunc
-def filter_vcf(infile, outfile, filters, no_short_circuit=False, 
+def filter_vcf_variants(infile, outfile, filters, no_short_circuit=False, 
     no_filtered=False):
     """Filter VCF.
     
