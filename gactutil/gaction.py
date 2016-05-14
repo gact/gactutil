@@ -421,8 +421,8 @@ class gactfunc(object):
                                     raise ValueError("{} docstring specifies 'NoneType' for parameter {!r}".format(
                                         func_name, param_name))
                                 
-                                # Check parameter type is supported.
-                                if not _gtypes[type_name].is_ductile:
+                                # Check parameter type can be obtained from string or file.
+                                if not ( _gtypes[type_name].is_ductile or _gtypes[type_name].is_compound ):
                                     raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                         func_name, type_name, param_name))
                                 
