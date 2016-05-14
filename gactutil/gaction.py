@@ -71,6 +71,7 @@ _GFTS = namedtuple('GFTS', [
     'is_compound',    # Composite data type.
     'is_delimitable', # Convertible to a delimited string, and vice versa.
     'is_ductile',     # Convertible to a single-line string, and vice versa.
+    'is_fileable',    # Can be loaded from and dumped to file.
     'match'           # Function to match object to the given type spec.
 ])
 
@@ -78,15 +79,23 @@ _GFTS = namedtuple('GFTS', [
 # as Python function arguments and as command-line arguments, whether loaded
 # from a file or converted from a simple string.
 _gtypes = OrderedDict([
-  #                          NAME   COMP  DELIM   DUCT  MATCH
-  ('NoneType',  _GFTS( 'NoneType', False,  True,  True, lambda x: isinstance(x, NoneType))),
-  ('bool',      _GFTS(     'bool', False,  True,  True, lambda x: isinstance(x, bool))),
-  ('float',     _GFTS(    'float', False,  True,  True, lambda x: isinstance(x, float))),
-  ('int',       _GFTS(      'int', False,  True,  True, lambda x: isinstance(x, IntType))),
-  ('string',    _GFTS(   'string', False,  True,  True, lambda x: isinstance(x, basestring))),
-  ('dict',      _GFTS(     'dict',  True,  True,  True, lambda x: isinstance(x, dict))),
-  ('list',      _GFTS(     'list',  True,  True,  True, lambda x: isinstance(x, list))),
-  ('DataFrame', _GFTS('DataFrame',  True, False, False, lambda x: isinstance(x, DataFrame)))
+    #                          NAME  COMPOUND  DELIMITABLE   DUCTILE  FILEABLE
+    ('NoneType',  _GFTS( 'NoneType',    False,        True,     True,     True,
+        lambda x: isinstance(x, NoneType))),
+    ('bool',      _GFTS(     'bool',    False,        True,     True,     True,
+        lambda x: isinstance(x, bool))),
+    ('float',     _GFTS(    'float',    False,        True,     True,     True,
+        lambda x: isinstance(x, float))),
+    ('int',       _GFTS(      'int',    False,        True,     True,     True,
+        lambda x: isinstance(x, IntType))),
+    ('string',    _GFTS(   'string',    False,        True,     True,     True,
+        lambda x: isinstance(x, basestring))),
+    ('dict',      _GFTS(     'dict',     True,        True,     True,     True,
+        lambda x: isinstance(x, dict))),
+    ('list',      _GFTS(     'list',     True,        True,     True,     True,
+        lambda x: isinstance(x, list))),
+    ('DataFrame', _GFTS('DataFrame',     True,       False,    False,     True,
+        lambda x: isinstance(x, DataFrame)))
 ])
 
 _info = {
@@ -422,7 +431,7 @@ class gactfunc(object):
                                         func_name, param_name))
                                 
                                 # Check parameter type can be obtained from string or file.
-                                if not ( _gtypes[type_name].is_ductile or _gtypes[type_name].is_compound ):
+                                if not ( _gtypes[type_name].is_ductile or _gtypes[type_name].is_fileable ):
                                     raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                         func_name, type_name, param_name))
                                 
@@ -1028,9 +1037,9 @@ class gactfunc(object):
                 # Mark as short form optional.
                 param_info['group'] = 'short'
                 
-            # ..otherwise if parameter is of a compound type, create
-            # two (mutually exclusive) parameters: one to accept argument
-            # as a string, the other to load it from a file..
+            # ..otherwise if parameter is of a compound type, create up to two
+            # (mutually exclusive) parameters: one to accept argument as string
+            # (if ductile), the other to load it from a file (if fileable)..
             elif _gtypes[ param_info['type'] ].is_compound:
                 
                 # Compound parameters are treated as optionals.
