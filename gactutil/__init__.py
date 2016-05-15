@@ -18,6 +18,7 @@ from os.path import expanduser
 from os.path import expandvars
 from os.path import realpath
 from os.path import relpath
+import pickle
 from pkg_resources import resource_filename
 from platform import system
 from shutil import rmtree
@@ -27,8 +28,6 @@ from tempfile import mkdtemp
 from tempfile import NamedTemporaryFile
 from tokenize import generate_tokens
 from tokenize import TokenError
-from yaml import dump
-from yaml import load
 from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
@@ -767,10 +766,10 @@ class TextWriter(TextRW):
 
 def _read_about():
     """Read information about this package."""
-    about_file = os.path.join('data', 'about.yaml')
+    about_file = os.path.join('data', 'about.p')
     about_path = resource_filename('gactutil', about_file)
     with open(about_path, 'r') as fh:
-        about_info = load(fh)
+        about_info = pickle.load(fh)
     return about_info
 
 def _read_setting(key):
@@ -850,9 +849,9 @@ def _setup_about(setup_info):
         os.makedirs(data_dir)
     
     # Write info about package.
-    about_file = os.path.join(data_dir, 'about.yaml')
+    about_file = os.path.join(data_dir, 'about.p')
     with open(about_file, 'w') as fh:
-        dump(about_info, fh, default_flow_style=False)
+        pickle.dump(about_info, fh)
 
 def _tokenise_source(source):
     """Tokenise source code into token strings."""
