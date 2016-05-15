@@ -26,12 +26,12 @@ import sys
 from textwrap import dedent
 from types import IntType
 from types import NoneType
-from yaml import safe_dump
-from yaml import safe_load
+import yaml
 from yaml import YAMLError
 
 from gactutil import _read_about
 from gactutil import _tokenise_source
+from gactutil import SafeLoader # unicode-only YAML loader
 from gactutil import TextReader
 from gactutil import TextWriter
 
@@ -256,7 +256,7 @@ class _Chaperon(object):
         if not isinstance(s, basestring):
             raise TypeError("object is not of type string ~ {!r}".format(s))
         try:
-            x = safe_load(s)
+            x = yaml.safe_load(s)
             assert isinstance(x, bool)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse Boolean string ~ {!r}".format(s))
@@ -334,7 +334,7 @@ class _Chaperon(object):
         
         try:
             with TextReader(f) as reader:
-                x = safe_load(reader)
+                x = yaml.safe_load(reader)
             assert isinstance(x, dict)
         except (AssertionError, IOError, YAMLError):
             raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
@@ -352,7 +352,7 @@ class _Chaperon(object):
             s = '{' + s + '}'
         
         try:
-            x = safe_load(s)
+            x = yaml.safe_load(s)
             assert isinstance(x, dict)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse dict from string ~ {!r}".format(s))
@@ -364,7 +364,8 @@ class _Chaperon(object):
         """Output dictionary to file."""
         try:
             with TextWriter(f) as writer:
-                safe_dump(x, writer, default_flow_style=False, width=sys.maxint)
+                yaml.safe_dump(x, writer, default_flow_style=False,
+                    width=sys.maxint, allow_unicode=True, encoding='utf-8')
         except (IOError, YAMLError):
             raise ValueError("failed to output dictionary to file ~ {!r}".format(x))
     
@@ -373,7 +374,8 @@ class _Chaperon(object):
         """Convert dictionary to string."""
         
         try:
-            s = safe_dump(x, default_flow_style=True, width=sys.maxint)
+            s = yaml.safe_dump(x, default_flow_style=True, width=sys.maxint,
+                allow_unicode=False, encoding='ascii')
             assert isinstance(s, basestring)
         except (AssertionError, YAMLError):
             raise ValueError("failed to convert dict to string ~ {!r}".format(x))
@@ -453,7 +455,7 @@ class _Chaperon(object):
                     raise RuntimeError("expected a single document in list stream")
                 
                 try:
-                    element = safe_load(line)
+                    element = yaml.safe_load(line)
                 except YAMLError as e:
                     # If explicit document end, flag and continue to next line..
                     if e.problem == "expected the node content, but found '<document end>'":
@@ -483,7 +485,7 @@ class _Chaperon(object):
             s = '[' + s + ']'
         
         try:
-            x = safe_load(s)
+            x = yaml.safe_load(s)
             assert isinstance(x, list)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse list from string ~ {!r}".format(s))
@@ -507,7 +509,8 @@ class _Chaperon(object):
         """Convert list to string."""
         
         try:
-            s = safe_dump(x, default_flow_style=True, width=sys.maxint)
+            s = yaml.safe_dump(x, default_flow_style=True, width=sys.maxint,
+                allow_unicode=False, encoding='ascii')
             assert isinstance(s, basestring)
         except (AssertionError, YAMLError):
             raise ValueError("failed to convert list to string ~ {!r}".format(x))

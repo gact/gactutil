@@ -15,12 +15,12 @@ import time
 
 from BCBio import GFF
 from Bio import SeqIO
-from yaml import safe_dump
-from yaml import safe_load
+import yaml
 from yaml import YAMLError
 
 from gactutil.gaction import gactfunc
 from gactutil.ncbi import check_efetch
+from gactutil import SafeLoader # unicode-only YAML loader
 from gactutil import TextReader
 from gactutil import temporary_directory
 
@@ -238,7 +238,8 @@ class GenomeIndex(object):
         
         try:
             with open(index_path, 'w') as fh:
-                safe_dump(self._data, fh, default_flow_style=False)
+                yaml.safe_dump(self._data, fh, default_flow_style=False,
+                    allow_unicode=True, encoding='utf-8')
         except (IOError, YAMLError):
             raise RuntimeError("failed to dump genome index to directory ~ {!r}".format(directory))
     
@@ -254,7 +255,7 @@ class GenomeIndex(object):
         
         try:
             with open(index_path, 'r') as fh:
-                self._data = safe_load(fh)
+                self._data = yaml.safe_load(fh)
         except (IOError, YAMLError):
             raise RuntimeError("failed to load genome index from directory ~ {!r}".format(directory))
         

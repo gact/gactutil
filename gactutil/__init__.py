@@ -28,8 +28,8 @@ from tempfile import mkdtemp
 from tempfile import NamedTemporaryFile
 from tokenize import generate_tokens
 from tokenize import TokenError
-from yaml import safe_dump
-from yaml import safe_load
+import yaml
+from yaml import SafeLoader
 from yaml import YAMLError
 
 ################################################################################
@@ -42,6 +42,13 @@ _info = {
     # Config settings filename.
     'settings-file': 'settings.yaml'
 }
+
+################################################################################
+
+# Ensure YAML loads strings as unicode, even if convertible to a byte string.
+def construct_yaml_str(self, node):
+    return self.construct_scalar(node)
+SafeLoader.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
 
 ################################################################################
 
@@ -798,7 +805,7 @@ def _read_settings():
     if os.path.isfile(settings_path):
         try:
             with open(settings_path) as fh:
-                config_info = safe_load(fh)
+                config_info = yaml.safe_load(fh)
         except (IOError, YAMLError):
             raise RuntimeError("failed to read package settings file ~ {!r}".format(settings_file))
     else:
@@ -914,7 +921,8 @@ def _write_settings(config_info):
     settings_path = os.path.join(about['config_dir'], settings_file)
     try:
         with open(settings_path, 'w') as fh:
-            safe_dump(config_info, fh, default_flow_style=False)
+            yaml.safe_dump(config_info, fh, default_flow_style=False,
+                allow_unicode=True, encoding='utf-8')
     except (IOError, YAMLError):
         raise RuntimeError("failed to write package settings file ~ {!r}".format(settings_file))
 
