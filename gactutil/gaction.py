@@ -259,12 +259,12 @@ class _Chaperon(object):
     
     @staticmethod
     def _bool_from_string(s):
-        """Get bool from string."""
+        """Get bool from input str/unicode."""
         if not isinstance(s, basestring):
             raise TypeError("object is not of type string ~ {!r}".format(s))
         try:
             x = yaml.safe_load(s)
-            assert isinstance(x, bool)
+            assert _Chaperon.supported_types['bool'].match(x)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse Boolean string ~ {!r}".format(s))
         return x
@@ -298,7 +298,7 @@ class _Chaperon(object):
     
     @staticmethod
     def _DataFrame_from_string(s):
-        """Get Pandas DataFrame from string."""
+        """Get Pandas DataFrame from input str/unicode."""
         
         if not isinstance(s, basestring):
             raise TypeError("object is not of string type ~ {!r}".format(s))
@@ -344,12 +344,12 @@ class _Chaperon(object):
     
     @staticmethod
     def _date_from_string(s):
-        """Get date from string."""
+        """Get date from input str/unicode."""
         if not isinstance(s, basestring):
             raise TypeError("object is not of type string ~ {!r}".format(s))
         try:
             x = yaml.safe_load(s)
-            assert isinstance(x, date)
+            assert _Chaperon.supported_types['date'].match(x)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse date string ~ {!r}".format(s))
         return x
@@ -375,12 +375,12 @@ class _Chaperon(object):
     
     @staticmethod
     def _datetime_from_string(s):
-        """Get datetime from string."""
+        """Get datetime from input str/unicode."""
         if not isinstance(s, basestring):
             raise TypeError("object is not of type string ~ {!r}".format(s))
         try:
             x = yaml.safe_load(s)
-            assert isinstance(x, datetime)
+            assert _Chaperon.supported_types['datetime'].match(x)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse datetime string ~ {!r}".format(s))
         return x
@@ -412,7 +412,7 @@ class _Chaperon(object):
     
     @staticmethod
     def _dict_from_string(s):
-        """Get dictionary from string."""
+        """Get dictionary from input str/unicode."""
         
         if not isinstance(s, basestring):
             raise TypeError("object is not of string type ~ {!r}".format(s))
@@ -422,7 +422,7 @@ class _Chaperon(object):
         
         try:
             x = yaml.safe_load(s)
-            assert isinstance(x, dict)
+            assert _Chaperon.supported_types['dict'].match(x)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse dict from string ~ {!r}".format(s))
         
@@ -458,7 +458,19 @@ class _Chaperon(object):
         """Get float from file."""
         with TextReader(f) as fh:
             s = fh.read().strip()
-        return float(s)
+        return _Chaperon._float_from_string(s)
+    
+    @staticmethod
+    def _float_from_string(s):
+        """Get float from input str/unicode."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        try:
+            x = yaml.safe_load(s)
+            assert _Chaperon.supported_types['float'].match(x)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to create float from string ~ {!r}".format(s))
+        return x
     
     @staticmethod
     def _float_to_file(x, f):
@@ -482,7 +494,19 @@ class _Chaperon(object):
         """Get integer from file."""
         with TextReader(f) as fh:
             s = fh.read().strip()
-        return int(s)
+        return _Chaperon._int_from_string(s)
+    
+    @staticmethod
+    def _int_from_string(s):
+        """Get integer from input str/unicode."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        try:
+            x = yaml.safe_load(s)
+            assert _Chaperon.supported_types['int'].match(x)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to create int from string ~ {!r}".format(s))
+        return x
     
     @staticmethod
     def _int_to_file(x, f):
@@ -545,7 +569,7 @@ class _Chaperon(object):
     
     @staticmethod
     def _list_from_string(s):
-        """Get list from string."""
+        """Get list from input str/unicode."""
         
         if not isinstance(s, basestring):
             raise TypeError("object is not of string type ~ {!r}".format(s))
@@ -555,7 +579,7 @@ class _Chaperon(object):
         
         try:
             x = yaml.safe_load(s)
-            assert isinstance(x, list)
+            assert _Chaperon.supported_types['list'].match(x)
         except (AssertionError, YAMLError):
             raise ValueError("failed to parse list from string ~ {!r}".format(s))
         
@@ -597,10 +621,13 @@ class _Chaperon(object):
     
     @staticmethod
     def _NoneType_from_string(s):
-        """Get None from string."""
+        """Get None from input str/unicode."""
         if not isinstance(s, basestring):
             raise TypeError("object is not of type string ~ {!r}".format(s))
-        if s != 'null':
+        try:
+            x = yaml.safe_load(s)
+            assert _Chaperon.supported_types['NoneType'].match(x)
+        except (AssertionError, YAMLError):
             raise ValueError("failed to create 'NoneType' from string ~ {!r}".format(s))
         return None
     
@@ -615,33 +642,6 @@ class _Chaperon(object):
     def _NoneType_to_string(x):
         """Convert None to string."""
         return 'null'
-    
-    @staticmethod
-    def _object_from_string(s, type_name):
-        """Get object from string."""
-        if type_name == 'NoneType':
-            x = _Chaperon._NoneType_from_string(s)
-        elif type_name == 'bool':
-            x = _Chaperon._bool_from_string(s)
-        elif type_name == 'float':
-            x = float(s)
-        elif type_name == 'int':
-            x = int(s)
-        elif type_name == 'datetime':
-            x = _Chaperon._datetime_from_string(s)
-        elif type_name == 'date':
-            x = _Chaperon._date_from_string(s)
-        elif type_name == 'dict':
-            x = _Chaperon._dict_from_string(s)
-        elif type_name == 'list':
-            x = _Chaperon._list_from_string(s)
-        elif type_name == 'DataFrame':
-            x = _Chaperon._DataFrame_from_string(s)
-        elif type_name == 'str':
-            x = s
-        else:
-            raise ValueError("failed to get unsupported type ({!r}) from string".format(type_name))
-        return x
     
     @staticmethod
     def _object_to_string(x):
@@ -672,14 +672,26 @@ class _Chaperon(object):
     
     @staticmethod
     def _str_from_file(f):
-        """Get string from file."""
+        """Get unicode string from file."""
         with TextReader(f) as fh:
             s = fh.read().rstrip()
-        return s
+        return _Chaperon._str_from_string(s)
+    
+    @staticmethod
+    def _str_from_string(s):
+        """Get unicode string from input str/unicode."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        try:
+            x = yaml.safe_load(s)
+            assert _Chaperon.supported_types['str'].match(x)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to create unicode string from input str/unicode ~ {!r}".format(s))
+        return x
     
     @staticmethod
     def _str_to_file(s, f):
-        """Output string to file."""
+        """Output unicode string to file."""
         with TextWriter(f) as fh:
             fh.write('{}\n'.format(s))
     
@@ -738,14 +750,18 @@ class _Chaperon(object):
         if type_name not in _Chaperon.supported_types:
             raise TypeError("unsupported type ~ {!r}".format(type_name))
         func_name = '_{}_from_file'.format(type_name)
-        function = getattr(self, func_name)
+        function = getattr(cls, func_name)
         x = function(filepath)
         return _Chaperon(x, type_name)
         
     @classmethod
     def from_string(cls, string, type_name):
-        """Get chaperon object from string."""
-        x = _Chaperon._object_from_string(string, type_name)
+        """Get chaperon object from input string."""
+        if type_name not in _Chaperon.supported_types:
+            raise TypeError("unsupported type ~ {!r}".format(type_name))
+        func_name = '_{}_from_string'.format(type_name)
+        function = getattr(cls, func_name)
+        x = function(string)
         return _Chaperon(x, type_name)
     
     @property
