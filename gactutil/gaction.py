@@ -88,7 +88,7 @@ _gtypes = OrderedDict([
         lambda x: isinstance(x, float))),
     ('int',       _GFTS(      'int',    False,        True,     True,     True,
         lambda x: isinstance(x, IntType))),
-    ('string',    _GFTS(   'string',    False,        True,     True,     True,
+    ('str',       _GFTS(      'str',    False,        True,     True,     True,
         lambda x: isinstance(x, basestring))),
     ('dict',      _GFTS(     'dict',     True,        True,     True,     True,
         lambda x: isinstance(x, dict))),
@@ -203,7 +203,7 @@ _info = {
         
         'directory': {
             'flag': '-d',
-            'type': 'string'
+            'type': 'str'
         },
         
         'threads': {
@@ -576,7 +576,7 @@ class gactfunc(object):
             raise TypeError("parameter type ({}) differs from that expected ({})".format(
                 t, type_name))
         
-        if t == 'string':
+        if t == 'str':
         
             _validate_ductile(x)
         
@@ -604,7 +604,7 @@ class gactfunc(object):
             raise TypeError("return value type ({}) differs from that expected ({})".format(
                 t, type_name))
         
-        if t == 'string':
+        if t == 'str':
             
             _validate_ductile(x)
             
@@ -824,7 +824,7 @@ class gactfunc(object):
                         
                     # Check parameter type is as expected.
                     type_name = self._data['param_spec'][param_name]['type']
-                    if type_name != 'string':
+                    if type_name != 'str':
                         raise TypeError("{} {} parameter must be of type string, not {} ~ {!r}".format(
                             func_name, channel, type_name, param_name))
                     
@@ -1850,7 +1850,7 @@ def _object_from_file(f, object_type):
         x = _list_from_file(f)
     elif object_type == 'DataFrame':
         x = _DataFrame_from_file(f)
-    elif object_type == 'string':
+    elif object_type == 'str':
         x = _string_from_file(f)
     else:
         raise ValueError("failed to get unsupported type ({!r}) from file".format(object_type))
@@ -1872,7 +1872,7 @@ def _object_from_string(s, object_type):
         x = _list_from_string(s)
     elif object_type == 'DataFrame':
         x = _DataFrame_from_string(s)
-    elif object_type == 'string':
+    elif object_type == 'str':
         x = s
     else:
         raise ValueError("failed to get unsupported type ({!r}) from string".format(object_type))
@@ -1894,7 +1894,7 @@ def _object_to_file(x, f):
         _list_to_file(x, f)
     elif _gtypes['DataFrame'].match(x):
         _DataFrame_to_file(x, f)
-    elif _gtypes['string'].match(x):
+    elif _gtypes['str'].match(x):
         _string_to_file(x, f)
     else:
         raise ValueError("failed to output object of unsupported type ({!r}) to file".format(type(x).__name__))
@@ -1915,7 +1915,7 @@ def _object_to_string(x):
         s = _list_to_string(x)
     elif _gtypes['DataFrame'].match(x):
         s = _DataFrame_to_string(x)
-    elif _gtypes['string'].match(x):
+    elif _gtypes['str'].match(x):
         s = x
     else:
         raise ValueError("failed to convert object of unsupported type ({!r}) to string".format(type(x).__name__))
@@ -1938,7 +1938,7 @@ def _validate_delimitable(x):
     
     t = _get_type_name(x)
     
-    if t == 'string':
+    if t == 'str':
         
         _validate_ductile(x)
         
@@ -1961,7 +1961,7 @@ def _validate_ductile(x):
     
     t = _get_type_name(x)
     
-    if t == 'string':
+    if t == 'str':
         
         if '\n' in x:
             raise ValueError("string is not ductile ~ {!r}".format(x))

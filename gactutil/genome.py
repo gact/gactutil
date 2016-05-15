@@ -349,10 +349,10 @@ def _norm_chr(chromosome):
     """Normalise chromosome name.
     
     Args:
-        chromosome (string): Chromosome name.
+        chromosome (str): Chromosome name.
     
     Returns:
-        string: Normalised chromosome name. Returns None on failure.
+        str: Normalised chromosome name. Returns None on failure.
     """
     
     # This pattern is modelled on the method used by SnpEff to simplify 
@@ -440,7 +440,7 @@ def index_genome(directory):
     the input directory and saves these to a genome index file in YAML format.
     
     Args:
-        directory (string): Path to yeast genome data directory.
+        directory (str): Path to yeast genome data directory.
     """
     gindex = GenomeIndex(directory)
     gindex.dump(directory)
@@ -480,8 +480,8 @@ def prep_genome(directory, email=None):
     be converted to GFF3 format before input to this script.
     
     Args:
-        directory (string): Path to yeast genome data directory.
-        email (string): Contact email for NCBI E-utilities.
+        directory (str): Path to yeast genome data directory.
+        email (str): Contact email for NCBI E-utilities.
     """
     
     # PROCESS ... ##############################################################
