@@ -1636,8 +1636,6 @@ def _dict_from_file(f):
     except (AssertionError, IOError, YAMLError):
         raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
     
-    gactfunc._validate_param_type(x)
-    
     return x
 
 def _dict_from_string(s):
@@ -1654,8 +1652,6 @@ def _dict_from_string(s):
         assert isinstance(x, dict)
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse dict from string ~ {!r}".format(s))
-    
-    gactfunc._validate_param_type(x)
     
     return x
 
@@ -1763,8 +1759,6 @@ def _list_from_file(f):
         while len(x) > 0 and x[-1] is None:
             x.pop()
     
-    gactfunc._validate_param_type(x)
-    
     return x
 
 def _list_from_string(s):
@@ -1781,8 +1775,6 @@ def _list_from_string(s):
         assert isinstance(x, list)
     except (AssertionError, YAMLError):
         raise ValueError("failed to parse list from string ~ {!r}".format(s))
-    
-    gactfunc._validate_param_type(x)
     
     return x
 
@@ -1925,7 +1917,6 @@ def _string_from_file(f):
     """Get string from file."""
     with TextReader(f) as fh:
         s = fh.read().rstrip()
-    gactfunc._validate_param_type(s)
     return s
 
 def _string_to_file(s, f):
