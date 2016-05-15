@@ -671,32 +671,6 @@ class _Chaperon(object):
         return x
     
     @staticmethod
-    def _object_to_file(x, f):
-        """Output object to file."""
-        if _Chaperon.supported_types['NoneType'].match(x):
-            _Chaperon._NoneType_to_file(x, f)
-        elif _Chaperon.supported_types['bool'].match(x):
-            _Chaperon._bool_to_file(x, f)
-        elif _Chaperon.supported_types['float'].match(x):
-            _Chaperon._float_to_file(x, f)
-        elif _Chaperon.supported_types['int'].match(x):
-            _Chaperon._int_to_file(x, f)
-        elif _Chaperon.supported_types['datetime'].match(x):
-            _Chaperon._datetime_to_file(x, f)
-        elif _Chaperon.supported_types['date'].match(x):
-            _Chaperon._date_to_file(x, f)
-        elif _Chaperon.supported_types['dict'].match(x):
-            _Chaperon._dict_to_file(x, f)
-        elif _Chaperon.supported_types['list'].match(x):
-            _Chaperon._list_to_file(x, f)
-        elif _Chaperon.supported_types['DataFrame'].match(x):
-            _Chaperon._DataFrame_to_file(x, f)
-        elif _Chaperon.supported_types['str'].match(x):
-            _Chaperon._string_to_file(x, f)
-        else:
-            raise ValueError("failed to output object of unsupported type ({!r}) to file".format(type(x).__name__))
-    
-    @staticmethod
     def _object_to_string(x):
         """Convert object to string."""
         if _Chaperon.supported_types['NoneType'].match(x):
@@ -828,7 +802,9 @@ class _Chaperon(object):
         
     def to_file(self, filepath):
         """Output chaperoned object to file."""
-        _Chaperon._object_to_file(self._obj, filepath)
+        func_name = '_{}_to_file'.format(self._type_name)
+        function = getattr(self, func_name)
+        function(self._obj, filepath)
 
 class gactfunc(object):
     """A gactfunc wrapper class."""
