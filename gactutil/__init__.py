@@ -33,8 +33,6 @@ from yaml import safe_dump
 from yaml import safe_load
 from yaml import YAMLError
 
-#from gactutil.gaction import gactfunc
-
 ################################################################################
 
 _info = {
