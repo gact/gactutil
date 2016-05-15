@@ -241,6 +241,520 @@ _info = {
 
 ################################################################################
 
+class _Chaperon(object):
+    
+    supported_types = OrderedDict([
+        #                          NAME  COMPOUND  DELIMIT   DUCTILE  FILEABLE
+        ('NoneType',  _GFTS( 'NoneType',    False,    True,     True,     True,
+            lambda x: isinstance(x, NoneType))),
+        ('bool',      _GFTS(     'bool',    False,    True,     True,     True,
+            lambda x: isinstance(x, bool))),
+        ('float',     _GFTS(    'float',    False,    True,     True,     True,
+            lambda x: isinstance(x, float))),
+        ('int',       _GFTS(      'int',    False,    True,     True,     True,
+            lambda x: isinstance(x, IntType))),
+        ('str',       _GFTS(      'str',    False,    True,     True,     True,
+            lambda x: isinstance(x, basestring))),
+        ('dict',      _GFTS(     'dict',     True,    True,     True,     True,
+            lambda x: isinstance(x, dict))),
+        ('list',      _GFTS(     'list',     True,    True,     True,     True,
+            lambda x: isinstance(x, list))),
+        ('DataFrame', _GFTS('DataFrame',     True,   False,    False,     True,
+            lambda x: isinstance(x, DataFrame)))
+    ])
+    
+    @staticmethod
+    def _bool_from_file(f):
+        """Get bool from file."""
+        with TextReader(f) as fh:
+            s = fh.read().strip()
+        return _Chaperon._bool_from_string(s)
+    
+    @staticmethod
+    def _bool_from_string(s):
+        """Get bool from string."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        try:
+            x = safe_load(s)
+            assert isinstance(x, bool)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to parse Boolean string ~ {!r}".format(s))
+        return x
+    
+    @staticmethod
+    def _bool_to_file(x, f):
+        """Output bool to file."""
+        s = _Chaperon._bool_to_string(x)
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _bool_to_string(x):
+        """Convert bool to string."""
+        return 'true' if x else 'false'
+    
+    @staticmethod
+    def _DataFrame_from_file(f):
+        """Get Pandas DataFrame from file."""
+        
+        try:
+            with TextReader(f) as reader:
+                x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False,
+                    skipinitialspace=True, true_values=_info['true_values'],
+                    false_values=_info['false_values'], keep_default_na=False,
+                    na_values=_info['na_values'])
+        except (IOError, OSError):
+            raise RuntimeError("failed to get DataFrame from file ~ {!r}".format(f))
+        
+        return x
+    
+    @staticmethod
+    def _DataFrame_from_string(s):
+        """Get Pandas DataFrame from string."""
+        
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of string type ~ {!r}".format(s))
+        
+        try:
+            with BytesIO(s) as fh:
+                x = read_csv(fh, sep=',', header=0, mangle_dupe_cols=False,
+                    skipinitialspace=True, true_values=_info['true_values'],
+                    false_values=_info['false_values'], keep_default_na=False,
+                    na_values=_info['na_values'])
+        except (IOError, OSError):
+            raise RuntimeError("failed to get DataFrame from string ~ {!r}".format(f))
+        
+        return x
+    
+    @staticmethod
+    def _DataFrame_to_file(x, f):
+        """Output Pandas DataFrame to file."""
+        try:
+            with TextWriter(f) as writer:
+                x.to_csv(writer, sep=',', na_rep=_info['na_values'][0], index=False)
+        except (IOError, OSError):
+            raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
+
+    @staticmethod
+    def _DataFrame_to_string(x):
+        """Convert Pandas DataFrame to string."""
+        try:
+            with BytesIO() as fh:
+                x.to_csv(fh, sep=',', na_rep=_info['na_values'][0], index=False)
+                s = fh.getvalue()
+        except (IOError, OSError):
+            raise ValueError("failed to output DataFrame to string ~ {!r}".format(x))
+        
+        return s
+    
+    @staticmethod
+    def _dict_from_file(f):
+        """Get dictionary from file."""
+        
+        try:
+            with TextReader(f) as reader:
+                x = safe_load(reader)
+            assert isinstance(x, dict)
+        except (AssertionError, IOError, YAMLError):
+            raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
+        
+        return x
+    
+    @staticmethod
+    def _dict_from_string(s):
+        """Get dictionary from string."""
+        
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of string type ~ {!r}".format(s))
+        
+        if not ( s.startswith('{') and s.endswith('}') ):
+            s = '{' + s + '}'
+        
+        try:
+            x = safe_load(s)
+            assert isinstance(x, dict)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to parse dict from string ~ {!r}".format(s))
+        
+        return x
+    
+    @staticmethod
+    def _dict_to_file(x, f):
+        """Output dictionary to file."""
+        try:
+            with TextWriter(f) as writer:
+                safe_dump(x, writer, default_flow_style=False, width=sys.maxint)
+        except (IOError, YAMLError):
+            raise ValueError("failed to output dictionary to file ~ {!r}".format(x))
+    
+    @staticmethod
+    def _dict_to_string(x):
+        """Convert dictionary to string."""
+        
+        try:
+            s = safe_dump(x, default_flow_style=True, width=sys.maxint)
+            assert isinstance(s, basestring)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to convert dict to string ~ {!r}".format(x))
+        
+        s = s.rstrip('\n')
+        
+        return s
+    
+    @staticmethod
+    def _float_from_file(f):
+        """Get float from file."""
+        with TextReader(f) as fh:
+            s = fh.read().strip()
+        return float(s)
+    
+    @staticmethod
+    def _float_to_file(x, f):
+        """Output float to file."""
+        s = str(x)
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _get_type_name(x):
+        """Get type name of object."""
+        
+        for t in _Chaperon.supported_types:
+            if _Chaperon.supported_types[t].match(x):
+                return t
+        
+        raise TypeError("unknown gactfunc parameter/return type ~ {!r}".format(type(x).__name__))
+    
+    @staticmethod
+    def _int_from_file(f):
+        """Get integer from file."""
+        with TextReader(f) as fh:
+            s = fh.read().strip()
+        return int(s)
+    
+    @staticmethod
+    def _int_to_file(x, f):
+        """Output integer to file."""
+        s = str(x)
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _list_from_file(f):
+        """Get list from file."""
+        
+        with TextReader(f) as reader:
+            
+            document_ended = False
+            x = list()
+            
+            for line in reader:
+                
+                # Strip comments.
+                try:
+                    i = line.index('#')
+                except ValueError:
+                    pass
+                else:
+                    line = line[:i]
+                
+                # Strip leading/trailing whitespace.
+                line = line.strip()
+                
+                # Skip lines after explicit document end.
+                if document_ended:
+                    if line != '':
+                        raise RuntimeError("list elements found after document end")
+                    continue
+                
+                # Check for document separator.
+                if line == '---':
+                    raise RuntimeError("expected a single document in list stream")
+                
+                try:
+                    element = safe_load(line)
+                except YAMLError as e:
+                    # If explicit document end, flag and continue to next line..
+                    if e.problem == "expected the node content, but found '<document end>'":
+                        document_ended = True
+                        element = None
+                        continue
+                    else:
+                        raise e
+                
+                # Append line.
+                x.append(element)
+            
+            # Strip trailing null values.
+            while len(x) > 0 and x[-1] is None:
+                x.pop()
+        
+        return x
+    
+    @staticmethod
+    def _list_from_string(s):
+        """Get list from string."""
+        
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of string type ~ {!r}".format(s))
+        
+        if not ( s.startswith('[') and s.endswith(']') ):
+            s = '[' + s + ']'
+        
+        try:
+            x = safe_load(s)
+            assert isinstance(x, list)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to parse list from string ~ {!r}".format(s))
+        
+        return x
+    
+    @staticmethod
+    def _list_to_file(x, f):
+        """Output list to file."""
+        
+        with TextWriter(f) as writer:
+            for element in x:
+                try:
+                    line = _Chaperon._object_to_string(element)
+                    writer.write( '{}\n'.format( line.rstrip('\n') ) )
+                except (IOError, ValueError):
+                    raise ValueError("failed to output list to file ~ {!r}".format(x))
+    
+    @staticmethod
+    def _list_to_string(x):
+        """Convert list to string."""
+        
+        try:
+            s = safe_dump(x, default_flow_style=True, width=sys.maxint)
+            assert isinstance(s, basestring)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to convert list to string ~ {!r}".format(x))
+        
+        s = s.rstrip('\n')
+        
+        return s
+    
+    @staticmethod
+    def _None_from_file(f):
+        """Get None from file."""
+        with TextReader(f) as fh:
+            s = fh.read().strip()
+        return _Chaperon._None_from_string(s)
+    
+    @staticmethod
+    def _None_from_string(s):
+        """Get None from string."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        if s != 'null':
+            raise ValueError("failed to create 'NoneType' from string ~ {!r}".format(s))
+        return None
+    
+    @staticmethod
+    def _None_to_file(x, f):
+        """Output None to file."""
+        s = _Chaperon._None_to_string(x)
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _None_to_string(x):
+        """Convert None to string."""
+        return 'null'
+    
+    @staticmethod
+    def _object_from_file(f, type_name):
+        """Get object from file."""
+        if type_name == 'NoneType':
+            x = _Chaperon._None_from_file(f)
+        elif type_name == 'bool':
+            x = _Chaperon._bool_from_file(f)
+        elif type_name == 'float':
+            x = _Chaperon._float_from_file(f)
+        elif type_name == 'int':
+            x = _Chaperon._int_from_file(f)
+        elif type_name == 'dict':
+            x = _Chaperon._dict_from_file(f)
+        elif type_name == 'list':
+            x = _Chaperon._list_from_file(f)
+        elif type_name == 'DataFrame':
+            x = _Chaperon._DataFrame_from_file(f)
+        elif type_name == 'str':
+            x = _Chaperon._string_from_file(f)
+        else:
+            raise ValueError("failed to get unsupported type ({!r}) from file".format(type_name))
+        return x
+    
+    @staticmethod
+    def _object_from_string(s, type_name):
+        """Get object from string."""
+        if type_name == 'NoneType':
+            x = _Chaperon._None_from_string(s)
+        elif type_name == 'bool':
+            x = _Chaperon._bool_from_string(s)
+        elif type_name == 'float':
+            x = float(s)
+        elif type_name == 'int':
+            x = int(s)
+        elif type_name == 'dict':
+            x = _Chaperon._dict_from_string(s)
+        elif type_name == 'list':
+            x = _Chaperon._list_from_string(s)
+        elif type_name == 'DataFrame':
+            x = _Chaperon._DataFrame_from_string(s)
+        elif type_name == 'str':
+            x = s
+        else:
+            raise ValueError("failed to get unsupported type ({!r}) from string".format(type_name))
+        return x
+    
+    @staticmethod
+    def _object_to_file(x, f):
+        """Output object to file."""
+        if _Chaperon.supported_types['NoneType'].match(x):
+            _Chaperon._None_to_file(x, f)
+        elif _Chaperon.supported_types['bool'].match(x):
+            _Chaperon._bool_to_file(x, f)
+        elif _Chaperon.supported_types['float'].match(x):
+            _Chaperon._float_to_file(x, f)
+        elif _Chaperon.supported_types['int'].match(x):
+            _Chaperon._int_to_file(x, f)
+        elif _Chaperon.supported_types['dict'].match(x):
+            _Chaperon._dict_to_file(x, f)
+        elif _Chaperon.supported_types['list'].match(x):
+            _Chaperon._list_to_file(x, f)
+        elif _Chaperon.supported_types['DataFrame'].match(x):
+            _Chaperon._DataFrame_to_file(x, f)
+        elif _Chaperon.supported_types['str'].match(x):
+            _Chaperon._string_to_file(x, f)
+        else:
+            raise ValueError("failed to output object of unsupported type ({!r}) to file".format(type(x).__name__))
+    
+    @staticmethod
+    def _object_to_string(x):
+        """Convert object to string."""
+        if _Chaperon.supported_types['NoneType'].match(x):
+            s = _Chaperon._None_to_string(x)
+        elif _Chaperon.supported_types['bool'].match(x):
+            s = _Chaperon._bool_to_string(x)
+        elif _Chaperon.supported_types['float'].match(x):
+            s = str(x)
+        elif _Chaperon.supported_types['int'].match(x):
+            s = str(x)
+        elif _Chaperon.supported_types['dict'].match(x):
+            s = _Chaperon._dict_to_string(x)
+        elif _Chaperon.supported_types['list'].match(x):
+            s = _Chaperon._list_to_string(x)
+        elif _Chaperon.supported_types['DataFrame'].match(x):
+            s = _Chaperon._DataFrame_to_string(x)
+        elif _Chaperon.supported_types['str'].match(x):
+            s = x
+        else:
+            raise ValueError("failed to convert object of unsupported type ({!r}) to string".format(type(x).__name__))
+        return s
+    
+    @staticmethod
+    def _string_from_file(f):
+        """Get string from file."""
+        with TextReader(f) as fh:
+            s = fh.read().rstrip()
+        return s
+    
+    @staticmethod
+    def _string_to_file(s, f):
+        """Output string to file."""
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _validate_delimitable(x):
+        """Validate delimitable object type."""
+        
+        t = _Chaperon._get_type_name(x)
+        
+        if t == 'str':
+            
+            _Chaperon._validate_ductile(x)
+            
+        elif t == 'dict':
+            
+            for key, value in x.items():
+                _Chaperon._validate_ductile(key)
+                _Chaperon._validate_ductile(value)
+            
+        elif t == 'list':
+            
+            for element in x:
+                _Chaperon._validate_ductile(element)
+            
+        elif not _Chaperon.supported_types[t].is_delimitable:
+            raise TypeError("{} is not delimitable ~ {!r}".format(t, x))
+    
+    @staticmethod
+    def _validate_ductile(x):
+        """Validate ductile object type."""
+        
+        t = _Chaperon._get_type_name(x)
+        
+        if t == 'str':
+            
+            if '\n' in x:
+                raise ValueError("string is not ductile ~ {!r}".format(x))
+            
+        elif t == 'dict':
+            
+            for key, value in x.items():
+                _validate_ductile(key)
+                _validate_ductile(value)
+            
+        elif t == 'list':
+            
+            for element in x:
+                _validate_ductile(element)
+            
+        elif not _Chaperon.supported_types[t].is_ductile:
+            raise TypeError("{} is not ductile ~ {!r}".format(t, x))
+    
+    @classmethod
+    def from_file(cls, filepath, type_name):
+        """Get chaperon object from file."""
+        x = _Chaperon._object_from_file(filepath, type_name)
+        return _Chaperon(x, type_name)
+        
+    @classmethod
+    def from_string(cls, string, type_name):
+        """Get chaperon object from string."""
+        x = _Chaperon._object_from_string(string, type_name)
+        return _Chaperon(x, type_name)
+    
+    @property
+    def value(self):
+        """Get chaperoned object."""
+        return self._obj
+    
+    def __init__(self, x, type_name):
+        
+        if type_name not in _Chaperon.supported_types:
+            raise TypeError("unsupported type ~ {!r}".format(type_name))
+        
+        if not _Chaperon.supported_types[type_name].match(x):
+            raise TypeError("object must be of type {}, not {}".format(
+                type_name, type(x).__name__))
+        
+        self._obj = x
+        
+    def __repr__(self):
+        return '_Chaperon({})'.format( repr(self._obj) )
+        
+    def __str__(self):
+        return _Chaperon._object_to_string(self._obj)
+        
+    def to_file(self, filepath):
+        """Output chaperoned object to file."""
+        _Chaperon._object_to_file(self._obj, filepath)
+
 class gactfunc(object):
     """A gactfunc wrapper class."""
     
@@ -431,7 +945,8 @@ class gactfunc(object):
                                         func_name, param_name))
                                 
                                 # Check parameter type can be obtained from string or file.
-                                if not ( _gtypes[type_name].is_ductile or _gtypes[type_name].is_fileable ):
+                                if not ( _Chaperon.supported_types[type_name].is_ductile or
+                                    _Chaperon.supported_types[type_name].is_fileable ):
                                     raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                         func_name, type_name, param_name))
                                 
@@ -510,7 +1025,7 @@ class gactfunc(object):
                                         func_name))
                                 
                                 # Check return value type is supported.
-                                if type_name not in _gtypes:
+                                if type_name not in _Chaperon.supported_types:
                                     raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
                                         func_name, type_name ))
                             
@@ -570,7 +1085,7 @@ class gactfunc(object):
     def _validate_param_type(x, type_name=None):
         """Validate parameter object type."""
         
-        t = _get_type_name(x)
+        t = _Chaperon._get_type_name(x)
         
         if type_name is not None and t != type_name:
             raise TypeError("parameter type ({}) differs from that expected ({})".format(
@@ -591,14 +1106,14 @@ class gactfunc(object):
             for element in x:
                 _validate_ductile(element)
         
-        elif not _gtypes[t].is_ductile:
+        elif not _Chaperon.supported_types[t].is_ductile:
             raise TypeError("{} is not a valid parameter object ~ {!r}".format(t, x))
         
     @staticmethod
     def _validate_return_type(x, type_name=None):
         """Validate return value type."""
         
-        t = _get_type_name(x)
+        t = _Chaperon._get_type_name(x)
         
         if type_name is not None and t != type_name:
             raise TypeError("return value type ({}) differs from that expected ({})".format(
@@ -623,7 +1138,7 @@ class gactfunc(object):
                 for element in x:
                     _validate_delimitable(element)
             
-        elif t not in _gtypes:
+        elif t not in _Chaperon.supported_types:
             raise TypeError("{} is not a valid return value object ~ {!r}".format(t, x))
         
     def __init__(self, function):
@@ -732,7 +1247,7 @@ class gactfunc(object):
                     docstring_default = self._data['param_spec'][param_name]['docstring_default']
                     
                     try: # Coerce documented default from string.
-                        coerced_default = _object_from_string(docstring_default, type_name)
+                        coerced_default = _Chaperon._object_from_string(docstring_default, type_name)
                     except (TypeError, ValueError):
                         raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
                             func_name, param_name))
@@ -1000,7 +1515,7 @@ class gactfunc(object):
             elif param_name in _info['short_params']:
                 
                 # Check that this is not a compound type.
-                if _gtypes[ param_info['type'] ].is_compound:
+                if _Chaperon.supported_types[ param_info['type'] ].is_compound:
                     raise TypeError("cannot create short-form parameter {!r} of type {}".format(
                         param_name, param_info['type']))
                 
@@ -1040,7 +1555,7 @@ class gactfunc(object):
             # ..otherwise if parameter is of a compound type, create up to two
             # (mutually exclusive) parameters: one to accept argument as string
             # (if ductile), the other to load it from a file (if fileable)..
-            elif _gtypes[ param_info['type'] ].is_compound:
+            elif _Chaperon.supported_types[ param_info['type'] ].is_compound:
                 
                 # Compound parameters are treated as optionals.
                 # If parameter was positional, set as required.
@@ -1056,7 +1571,7 @@ class gactfunc(object):
                 
                 # If parameter is of a ductile type, set flag for
                 # it to be passed directly on the command line.
-                if _gtypes[ param_info['type'] ].is_ductile:
+                if _Chaperon.supported_types[ param_info['type'] ].is_ductile:
                     param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
                 
                 # Set file parameter name.
@@ -1378,7 +1893,7 @@ class _GactfuncCollection(MutableMapping):
                             
                             # If compound object parameter is of a parameter type,
                             # prepare to read from command line or load from file..
-                            if _gtypes[ param_info['type'] ].is_ductile:
+                            if _Chaperon.supported_types[ param_info['type'] ].is_ductile:
                                 
                                 # Set info for pair of alternative parameters.
                                 item_help = 'Set {} from string.'.format(param_info['type'])
@@ -1481,9 +1996,9 @@ class _GactfuncCollection(MutableMapping):
             # If argument specified, get from file or string.
             if arg is not None:
                 if filebound:
-                    args.__dict__[param_name] = _object_from_file(arg, type_name)
+                    args.__dict__[param_name] = _Chaperon.from_file(arg, type_name).value
                 elif param_info[param_name]['group'] != 'switch':
-                    args.__dict__[param_name] = _object_from_string(arg, type_name)
+                    args.__dict__[param_name] = _Chaperon.from_string(arg, type_name).value
         
         return function, args, retfile
     
@@ -1549,430 +2064,6 @@ class _GactfuncCollection(MutableMapping):
 
 ################################################################################
 
-def _bool_from_file(f):
-    """Get bool from file."""
-    with TextReader(f) as fh:
-        s = fh.read().strip()
-    return _bool_from_string(s)
-
-def _bool_from_string(s):
-    """Get bool from string."""
-    if not isinstance(s, basestring):
-        raise TypeError("object is not of type string ~ {!r}".format(s))
-    try:
-        x = safe_load(s)
-        assert isinstance(x, bool)
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to parse Boolean string ~ {!r}".format(s))
-    return x
-
-def _bool_to_file(x, f):
-    """Output bool to file."""
-    s = _bool_to_string(x)
-    with TextWriter(f) as fh:
-        fh.write('{}\n'.format(s))
-
-def _bool_to_string(x):
-    """Convert bool to string."""
-    return 'true' if x else 'false'
-
-def _DataFrame_from_file(f):
-    """Get Pandas DataFrame from file."""
-    
-    try:
-        with TextReader(f) as reader:
-            x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False,
-                skipinitialspace=True, true_values=_info['true_values'],
-                false_values=_info['false_values'], keep_default_na=False,
-                na_values=_info['na_values'])
-    except (IOError, OSError):
-        raise RuntimeError("failed to get DataFrame from file ~ {!r}".format(f))
-    
-    return x
-
-def _DataFrame_from_string(s):
-    """Get Pandas DataFrame from string."""
-    
-    if not isinstance(s, basestring):
-        raise TypeError("object is not of string type ~ {!r}".format(s))
-    
-    try:
-        with BytesIO(s) as fh:
-            x = read_csv(fh, sep=',', header=0, mangle_dupe_cols=False,
-                skipinitialspace=True, true_values=_info['true_values'],
-                false_values=_info['false_values'], keep_default_na=False,
-                na_values=_info['na_values'])
-    except (IOError, OSError):
-        raise RuntimeError("failed to get DataFrame from string ~ {!r}".format(f))
-    
-    return x
-
-def _DataFrame_to_file(x, f):
-    """Output Pandas DataFrame to file."""
-    try:
-        with TextWriter(f) as writer:
-            x.to_csv(writer, sep=',', na_rep=_info['na_values'][0], index=False)
-    except (IOError, OSError):
-        raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
-
-def _DataFrame_to_string(x):
-    """Convert Pandas DataFrame to string."""
-    try:
-        with BytesIO() as fh:
-            x.to_csv(fh, sep=',', na_rep=_info['na_values'][0], index=False)
-            s = fh.getvalue()
-    except (IOError, OSError):
-        raise ValueError("failed to output DataFrame to string ~ {!r}".format(x))
-    
-    return s
-
-def _dict_from_file(f):
-    """Get dictionary from file."""
-    
-    try:
-        with TextReader(f) as reader:
-            x = safe_load(reader)
-        assert isinstance(x, dict)
-    except (AssertionError, IOError, YAMLError):
-        raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
-    
-    return x
-
-def _dict_from_string(s):
-    """Get dictionary from string."""
-    
-    if not isinstance(s, basestring):
-        raise TypeError("object is not of string type ~ {!r}".format(s))
-    
-    if not ( s.startswith('{') and s.endswith('}') ):
-        s = '{' + s + '}'
-    
-    try:
-        x = safe_load(s)
-        assert isinstance(x, dict)
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to parse dict from string ~ {!r}".format(s))
-    
-    return x
-
-def _dict_to_file(x, f):
-    """Output dictionary to file."""
-    try:
-        with TextWriter(f) as writer:
-            safe_dump(x, writer, default_flow_style=False, width=sys.maxint)
-    except (IOError, YAMLError):
-        raise ValueError("failed to output dictionary to file ~ {!r}".format(x))
-    
-
-def _dict_to_string(x):
-    """Convert dictionary to string."""
-    
-    try:
-        s = safe_dump(x, default_flow_style=True, width=sys.maxint)
-        assert isinstance(s, basestring)
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to convert dict to string ~ {!r}".format(x))
-    
-    s = s.rstrip('\n')
-    
-    return s
-
-def _float_from_file(f):
-    """Get float from file."""
-    with TextReader(f) as fh:
-        s = fh.read().strip()
-    return float(s)
-
-def _float_to_file(x, f):
-    """Output float to file."""
-    s = str(x)
-    with TextWriter(f) as fh:
-        fh.write('{}\n'.format(s))
-
-def _get_type_name(x):
-    """Get type name of object."""
-    
-    for t in _gtypes:
-        if _gtypes[t].match(x):
-            return t
-    
-    raise TypeError("unknown gactfunc parameter/return type ~ {!r}".format(type(x).__name__))
-
-def _int_from_file(f):
-    """Get integer from file."""
-    with TextReader(f) as fh:
-        s = fh.read().strip()
-    return int(s)
-
-def _int_to_file(x, f):
-    """Output integer to file."""
-    s = str(x)
-    with TextWriter(f) as fh:
-        fh.write('{}\n'.format(s))
-
-def _list_from_file(f):
-    """Get list from file."""
-    
-    with TextReader(f) as reader:
-        
-        document_ended = False
-        x = list()
-        
-        for line in reader:
-            
-            # Strip comments.
-            try:
-                i = line.index('#')
-            except ValueError:
-                pass
-            else:
-                line = line[:i]
-            
-            # Strip leading/trailing whitespace.
-            line = line.strip()
-            
-            # Skip lines after explicit document end.
-            if document_ended:
-                if line != '':
-                    raise RuntimeError("list elements found after document end")
-                continue
-            
-            # Check for document separator.
-            if line == '---':
-                raise RuntimeError("expected a single document in list stream")
-            
-            try:
-                element = safe_load(line)
-            except YAMLError as e:
-                # If explicit document end, flag and continue to next line..
-                if e.problem == "expected the node content, but found '<document end>'":
-                    document_ended = True
-                    element = None
-                    continue
-                else:
-                    raise e
-            
-            # Append line.
-            x.append(element)
-        
-        # Strip trailing null values.
-        while len(x) > 0 and x[-1] is None:
-            x.pop()
-    
-    return x
-
-def _list_from_string(s):
-    """Get list from string."""
-    
-    if not isinstance(s, basestring):
-        raise TypeError("object is not of string type ~ {!r}".format(s))
-    
-    if not ( s.startswith('[') and s.endswith(']') ):
-        s = '[' + s + ']'
-    
-    try:
-        x = safe_load(s)
-        assert isinstance(x, list)
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to parse list from string ~ {!r}".format(s))
-    
-    return x
-
-def _list_to_file(x, f):
-    """Output list to file."""
-    
-    with TextWriter(f) as writer:
-        for element in x:
-            try:
-                line = _object_to_string(element)
-                writer.write( '{}\n'.format( line.rstrip('\n') ) )
-            except (IOError, ValueError):
-                raise ValueError("failed to output list to file ~ {!r}".format(x))
-
-def _list_to_string(x):
-    """Convert list to string."""
-    
-    try:
-        s = safe_dump(x, default_flow_style=True, width=sys.maxint)
-        assert isinstance(s, basestring)
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to convert list to string ~ {!r}".format(x))
-    
-    s = s.rstrip('\n')
-    
-    return s
-
-def _None_from_file(f):
-    """Get None from file."""
-    with TextReader(f) as fh:
-        s = fh.read().strip()
-    return _None_from_string(s)
-
-def _None_from_string(s):
-    """Get None from string."""
-    if not isinstance(s, basestring):
-        raise TypeError("object is not of type string ~ {!r}".format(s))
-    if s != 'null':
-        raise ValueError("failed to create 'NoneType' from string ~ {!r}".format(s))
-    return None
-
-def _None_to_file(x, f):
-    """Output None to file."""
-    s = _None_to_string(x)
-    with TextWriter(f) as fh:
-        fh.write('{}\n'.format(s))
-
-def _None_to_string(x):
-    """Convert None to string."""
-    return 'null'
-
-def _object_from_file(f, object_type):
-    """Get object from file."""
-    if object_type == 'NoneType':
-        x = _None_from_file(f)
-    elif object_type == 'bool':
-        x = _bool_from_file(f)
-    elif object_type == 'float':
-        x = _float_from_file(f)
-    elif object_type == 'int':
-        x = _int_from_file(f)
-    elif object_type == 'dict':
-        x = _dict_from_file(f)
-    elif object_type == 'list':
-        x = _list_from_file(f)
-    elif object_type == 'DataFrame':
-        x = _DataFrame_from_file(f)
-    elif object_type == 'str':
-        x = _string_from_file(f)
-    else:
-        raise ValueError("failed to get unsupported type ({!r}) from file".format(object_type))
-    return x
-
-def _object_from_string(s, object_type):
-    """Get object from string."""
-    if object_type == 'NoneType':
-        x = _None_from_string(s)
-    elif object_type == 'bool':
-        x = _bool_from_string(s)
-    elif object_type == 'float':
-        x = float(s)
-    elif object_type == 'int':
-        x = int(s)
-    elif object_type == 'dict':
-        x = _dict_from_string(s)
-    elif object_type == 'list':
-        x = _list_from_string(s)
-    elif object_type == 'DataFrame':
-        x = _DataFrame_from_string(s)
-    elif object_type == 'str':
-        x = s
-    else:
-        raise ValueError("failed to get unsupported type ({!r}) from string".format(object_type))
-    return x
-
-def _object_to_file(x, f):
-    """Output object to file."""
-    if _gtypes['NoneType'].match(x):
-        _None_to_file(x, f)
-    elif _gtypes['bool'].match(x):
-        _bool_to_file(x, f)
-    elif _gtypes['float'].match(x):
-        _float_to_file(x, f)
-    elif _gtypes['int'].match(x):
-        _int_to_file(x, f)
-    elif _gtypes['dict'].match(x):
-        _dict_to_file(x, f)
-    elif _gtypes['list'].match(x):
-        _list_to_file(x, f)
-    elif _gtypes['DataFrame'].match(x):
-        _DataFrame_to_file(x, f)
-    elif _gtypes['str'].match(x):
-        _string_to_file(x, f)
-    else:
-        raise ValueError("failed to output object of unsupported type ({!r}) to file".format(type(x).__name__))
-
-def _object_to_string(x):
-    """Convert object to string."""
-    if _gtypes['NoneType'].match(x):
-        s = _None_to_string(x)
-    elif _gtypes['bool'].match(x):
-        s = _bool_to_string(x)
-    elif _gtypes['float'].match(x):
-        s = str(x)
-    elif _gtypes['int'].match(x):
-        s = str(x)
-    elif _gtypes['dict'].match(x):
-        s = _dict_to_string(x)
-    elif _gtypes['list'].match(x):
-        s = _list_to_string(x)
-    elif _gtypes['DataFrame'].match(x):
-        s = _DataFrame_to_string(x)
-    elif _gtypes['str'].match(x):
-        s = x
-    else:
-        raise ValueError("failed to convert object of unsupported type ({!r}) to string".format(type(x).__name__))
-    return s
-
-def _string_from_file(f):
-    """Get string from file."""
-    with TextReader(f) as fh:
-        s = fh.read().rstrip()
-    return s
-
-def _string_to_file(s, f):
-    """Output string to file."""
-    with TextWriter(f) as fh:
-        fh.write('{}\n'.format(s))
-
-def _validate_delimitable(x):
-    """Validate delimitable object type."""
-    
-    t = _get_type_name(x)
-    
-    if t == 'str':
-        
-        _validate_ductile(x)
-        
-    elif t == 'dict':
-        
-        for key, value in x.items():
-            _validate_ductile(key)
-            _validate_ductile(value)
-        
-    elif t == 'list':
-        
-        for element in x:
-            _validate_ductile(element)
-        
-    elif not _gtypes[t].is_delimitable:
-        raise TypeError("{} is not delimitable ~ {!r}".format(t, x))
-
-def _validate_ductile(x):
-    """Validate ductile object type."""
-    
-    t = _get_type_name(x)
-    
-    if t == 'str':
-        
-        if '\n' in x:
-            raise ValueError("string is not ductile ~ {!r}".format(x))
-        
-    elif t == 'dict':
-        
-        for key, value in x.items():
-            _validate_ductile(key)
-            _validate_ductile(value)
-        
-    elif t == 'list':
-        
-        for element in x:
-            _validate_ductile(element)
-        
-    elif not _gtypes[t].is_ductile:
-        raise TypeError("{} is not ductile ~ {!r}".format(t, x))
-
-################################################################################
-
 def gaction(argv=None):
     """Run gaction command."""
     
@@ -1988,9 +2079,11 @@ def gaction(argv=None):
     function, args, retfile = gf.proc_args(args)
     
     result = function( **vars(args) )
-    
-    if result is not None:
-        _object_to_file(result, retfile)
+     
+    if function.return_spec is not None:
+        return_type = function.return_spec['type']
+        return_value = _Chaperon(result, return_type)
+        return_value.to_file(retfile)
 
 def main():
     gaction()
