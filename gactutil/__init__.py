@@ -148,6 +148,12 @@ class FrozenDict(Mapping):
                 self.__class__.__name__))
         self.__dict__[key] = value
     
+    def __str__(self):
+        return str(self._data)
+    
+    def __unicode__(self):
+        return unicode(self._data)
+    
     def copy(self):
         return self
     
@@ -322,6 +328,12 @@ class FrozenList(Sequence):
             raise TypeError("{!r} object does not support attribute assignment".format(
                 self.__class__.__name__))
         self.__dict__[index] = value
+    
+    def __str__(self):
+        return str(self._data)
+    
+    def __unicode__(self):
+        return unicode(self._data)
     
     def append(self, *args, **kwargs):
         raise TypeError("{!r} object does not support the append operation".format(
