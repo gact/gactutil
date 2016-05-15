@@ -798,6 +798,11 @@ class _Chaperon(object):
         return _Chaperon(x, type_name)
     
     @property
+    def type_name(self):
+        """Get chaperoned object."""
+        return self._type_name
+    
+    @property
     def value(self):
         """Get chaperoned object."""
         return self._obj
@@ -810,6 +815,8 @@ class _Chaperon(object):
         if not _Chaperon.supported_types[type_name].match(x):
             raise TypeError("object must be of type {}, not {}".format(
                 type_name, type(x).__name__))
+        
+        self._type_name = type_name
         
         self._obj = x
         
