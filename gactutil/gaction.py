@@ -8,6 +8,8 @@ from collections import MutableMapping
 from collections import namedtuple
 from collections import OrderedDict
 from copy import deepcopy
+from datetime import date
+from datetime import datetime
 from imp import load_source
 from importlib import import_module
 from inspect import getargspec
@@ -222,19 +224,24 @@ class _Chaperon(object):
     
     # Supported gactfunc parameter/return types. These must be suitable for use
     # both as Python function arguments and as command-line arguments, whether
-    # loaded from a file or converted from a simple string.
+    # loaded from a file or converted from a simple string. NB: types should be
+    # checked in order (e.g. bool before int, datetime before date).
     supported_types = OrderedDict([
         #                          NAME  COMPOUND  DELIMIT   DUCTILE  FILEABLE
         ('NoneType',  _GFTS( 'NoneType',    False,    True,     True,     True,
             lambda x: isinstance(x, NoneType))),
         ('bool',      _GFTS(     'bool',    False,    True,     True,     True,
             lambda x: isinstance(x, bool))),
+        ('str',       _GFTS(      'str',    False,    True,     True,     True,
+            lambda x: isinstance(x, basestring))),
         ('float',     _GFTS(    'float',    False,    True,     True,     True,
             lambda x: isinstance(x, float))),
         ('int',       _GFTS(      'int',    False,    True,     True,     True,
             lambda x: isinstance(x, IntType))),
-        ('str',       _GFTS(      'str',    False,    True,     True,     True,
-            lambda x: isinstance(x, basestring))),
+        ('datetime',  _GFTS( 'datetime',    False,    True,     True,     True,
+            lambda x: isinstance(x, datetime))),
+        ('date',      _GFTS( '    date',    False,    True,     True,     True,
+            lambda x: isinstance(x, date))),
         ('dict',      _GFTS(     'dict',     True,    True,     True,     True,
             lambda x: isinstance(x, dict))),
         ('list',      _GFTS(     'list',     True,    True,     True,     True,
@@ -327,6 +334,68 @@ class _Chaperon(object):
             raise ValueError("failed to output DataFrame to string ~ {!r}".format(x))
         
         return s
+    
+    @staticmethod
+    def _date_from_file(f):
+        """Get date from file."""
+        with TextReader(f) as fh:
+            s = fh.read().strip()
+        return _Chaperon._date_from_string(s)
+    
+    @staticmethod
+    def _date_from_string(s):
+        """Get date from string."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        try:
+            x = yaml.safe_load(s)
+            assert isinstance(x, date)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to parse date string ~ {!r}".format(s))
+        return x
+    
+    @staticmethod
+    def _date_to_file(x, f):
+        """Output date to file."""
+        s = _Chaperon._date_to_string(x)
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _date_to_string(x):
+        """Convert date to string."""
+        return x.strftime('%Y-%m-%d')
+    
+    @staticmethod
+    def _datetime_from_file(f):
+        """Get datetime from file."""
+        with TextReader(f) as fh:
+            s = fh.read().strip()
+        return _Chaperon._datetime_from_string(s)
+    
+    @staticmethod
+    def _datetime_from_string(s):
+        """Get datetime from string."""
+        if not isinstance(s, basestring):
+            raise TypeError("object is not of type string ~ {!r}".format(s))
+        try:
+            x = yaml.safe_load(s)
+            assert isinstance(x, datetime)
+        except (AssertionError, YAMLError):
+            raise ValueError("failed to parse datetime string ~ {!r}".format(s))
+        return x
+    
+    @staticmethod
+    def _datetime_to_file(x, f):
+        """Output datetime to file."""
+        s = _Chaperon._datetime_to_string(x)
+        with TextWriter(f) as fh:
+            fh.write('{}\n'.format(s))
+    
+    @staticmethod
+    def _datetime_to_string(x):
+        """Convert date to string."""
+        return x.strftime('%Y-%m-%d %H:%M:%S')
     
     @staticmethod
     def _dict_from_file(f):
@@ -558,6 +627,10 @@ class _Chaperon(object):
             x = _Chaperon._float_from_file(f)
         elif type_name == 'int':
             x = _Chaperon._int_from_file(f)
+        elif type_name == 'datetime':
+            x = _Chaperon._datetime_from_file(s)
+        elif type_name == 'date':
+            x = _Chaperon._date_from_file(s)
         elif type_name == 'dict':
             x = _Chaperon._dict_from_file(f)
         elif type_name == 'list':
@@ -581,6 +654,10 @@ class _Chaperon(object):
             x = float(s)
         elif type_name == 'int':
             x = int(s)
+        elif type_name == 'datetime':
+            x = _Chaperon._datetime_from_string(s)
+        elif type_name == 'date':
+            x = _Chaperon._date_from_string(s)
         elif type_name == 'dict':
             x = _Chaperon._dict_from_string(s)
         elif type_name == 'list':
@@ -604,6 +681,10 @@ class _Chaperon(object):
             _Chaperon._float_to_file(x, f)
         elif _Chaperon.supported_types['int'].match(x):
             _Chaperon._int_to_file(x, f)
+        elif _Chaperon.supported_types['datetime'].match(x):
+            _Chaperon._datetime_to_file(x, f)
+        elif _Chaperon.supported_types['date'].match(x):
+            _Chaperon._date_to_file(x, f)
         elif _Chaperon.supported_types['dict'].match(x):
             _Chaperon._dict_to_file(x, f)
         elif _Chaperon.supported_types['list'].match(x):
@@ -626,6 +707,10 @@ class _Chaperon(object):
             s = str(x)
         elif _Chaperon.supported_types['int'].match(x):
             s = str(x)
+        elif _Chaperon.supported_types['datetime'].match(x):
+            _Chaperon._datetime_to_string(x, f)
+        elif _Chaperon.supported_types['date'].match(x):
+            _Chaperon._date_to_string(x, f)
         elif _Chaperon.supported_types['dict'].match(x):
             s = _Chaperon._dict_to_string(x)
         elif _Chaperon.supported_types['list'].match(x):
