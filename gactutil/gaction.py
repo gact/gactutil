@@ -671,14 +671,14 @@ class _Chaperon(object):
         return s
     
     @staticmethod
-    def _string_from_file(f):
+    def _str_from_file(f):
         """Get string from file."""
         with TextReader(f) as fh:
             s = fh.read().rstrip()
         return s
     
     @staticmethod
-    def _string_to_file(s, f):
+    def _str_to_file(s, f):
         """Output string to file."""
         with TextWriter(f) as fh:
             fh.write('{}\n'.format(s))
