@@ -589,14 +589,14 @@ class _Chaperon(object):
         return s
     
     @staticmethod
-    def _None_from_file(f):
+    def _NoneType_from_file(f):
         """Get None from file."""
         with TextReader(f) as fh:
             s = fh.read().strip()
-        return _Chaperon._None_from_string(s)
+        return _Chaperon._NoneType_from_string(s)
     
     @staticmethod
-    def _None_from_string(s):
+    def _NoneType_from_string(s):
         """Get None from string."""
         if not isinstance(s, basestring):
             raise TypeError("object is not of type string ~ {!r}".format(s))
@@ -605,14 +605,14 @@ class _Chaperon(object):
         return None
     
     @staticmethod
-    def _None_to_file(x, f):
+    def _NoneType_to_file(x, f):
         """Output None to file."""
-        s = _Chaperon._None_to_string(x)
+        s = _Chaperon._NoneType_to_string(x)
         with TextWriter(f) as fh:
             fh.write('{}\n'.format(s))
     
     @staticmethod
-    def _None_to_string(x):
+    def _NoneType_to_string(x):
         """Convert None to string."""
         return 'null'
     
@@ -620,7 +620,7 @@ class _Chaperon(object):
     def _object_from_file(f, type_name):
         """Get object from file."""
         if type_name == 'NoneType':
-            x = _Chaperon._None_from_file(f)
+            x = _Chaperon._NoneType_from_file(f)
         elif type_name == 'bool':
             x = _Chaperon._bool_from_file(f)
         elif type_name == 'float':
@@ -647,7 +647,7 @@ class _Chaperon(object):
     def _object_from_string(s, type_name):
         """Get object from string."""
         if type_name == 'NoneType':
-            x = _Chaperon._None_from_string(s)
+            x = _Chaperon._NoneType_from_string(s)
         elif type_name == 'bool':
             x = _Chaperon._bool_from_string(s)
         elif type_name == 'float':
@@ -674,7 +674,7 @@ class _Chaperon(object):
     def _object_to_file(x, f):
         """Output object to file."""
         if _Chaperon.supported_types['NoneType'].match(x):
-            _Chaperon._None_to_file(x, f)
+            _Chaperon._NoneType_to_file(x, f)
         elif _Chaperon.supported_types['bool'].match(x):
             _Chaperon._bool_to_file(x, f)
         elif _Chaperon.supported_types['float'].match(x):
@@ -700,7 +700,7 @@ class _Chaperon(object):
     def _object_to_string(x):
         """Convert object to string."""
         if _Chaperon.supported_types['NoneType'].match(x):
-            s = _Chaperon._None_to_string(x)
+            s = _Chaperon._NoneType_to_string(x)
         elif _Chaperon.supported_types['bool'].match(x):
             s = _Chaperon._bool_to_string(x)
         elif _Chaperon.supported_types['float'].match(x):
