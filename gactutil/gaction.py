@@ -617,33 +617,6 @@ class _Chaperon(object):
         return 'null'
     
     @staticmethod
-    def _object_from_file(f, type_name):
-        """Get object from file."""
-        if type_name == 'NoneType':
-            x = _Chaperon._NoneType_from_file(f)
-        elif type_name == 'bool':
-            x = _Chaperon._bool_from_file(f)
-        elif type_name == 'float':
-            x = _Chaperon._float_from_file(f)
-        elif type_name == 'int':
-            x = _Chaperon._int_from_file(f)
-        elif type_name == 'datetime':
-            x = _Chaperon._datetime_from_file(s)
-        elif type_name == 'date':
-            x = _Chaperon._date_from_file(s)
-        elif type_name == 'dict':
-            x = _Chaperon._dict_from_file(f)
-        elif type_name == 'list':
-            x = _Chaperon._list_from_file(f)
-        elif type_name == 'DataFrame':
-            x = _Chaperon._DataFrame_from_file(f)
-        elif type_name == 'str':
-            x = _Chaperon._string_from_file(f)
-        else:
-            raise ValueError("failed to get unsupported type ({!r}) from file".format(type_name))
-        return x
-    
-    @staticmethod
     def _object_from_string(s, type_name):
         """Get object from string."""
         if type_name == 'NoneType':
@@ -762,7 +735,11 @@ class _Chaperon(object):
     @classmethod
     def from_file(cls, filepath, type_name):
         """Get chaperon object from file."""
-        x = _Chaperon._object_from_file(filepath, type_name)
+        if type_name not in _Chaperon.supported_types:
+            raise TypeError("unsupported type ~ {!r}".format(type_name))
+        func_name = '_{}_from_file'.format(type_name)
+        function = getattr(self, func_name)
+        x = function(filepath)
         return _Chaperon(x, type_name)
         
     @classmethod
