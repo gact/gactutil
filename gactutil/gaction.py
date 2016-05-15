@@ -375,9 +375,9 @@ class _Chaperon(object):
         
         try:
             s = yaml.safe_dump(x, default_flow_style=True, width=sys.maxint,
-                allow_unicode=False, encoding='ascii')
+                allow_unicode=True, encoding='ascii')
             assert isinstance(s, basestring)
-        except (AssertionError, YAMLError):
+        except (AssertionError, UnicodeEncodeError, YAMLError):
             raise ValueError("failed to convert dict to string ~ {!r}".format(x))
         
         s = s.rstrip('\n')
@@ -510,9 +510,9 @@ class _Chaperon(object):
         
         try:
             s = yaml.safe_dump(x, default_flow_style=True, width=sys.maxint,
-                allow_unicode=False, encoding='ascii')
+                allow_unicode=True, encoding='ascii')
             assert isinstance(s, basestring)
-        except (AssertionError, YAMLError):
+        except (AssertionError, UnicodeEncodeError, YAMLError):
             raise ValueError("failed to convert list to string ~ {!r}".format(x))
         
         s = s.rstrip('\n')
