@@ -75,29 +75,6 @@ _GFTS = namedtuple('GFTS', [
     'match'           # Function to match object to the given type spec.
 ])
 
-# Supported gactfunc parameter/return types. These must be suitable for use both
-# as Python function arguments and as command-line arguments, whether loaded
-# from a file or converted from a simple string.
-_gtypes = OrderedDict([
-    #                          NAME  COMPOUND  DELIMITABLE   DUCTILE  FILEABLE
-    ('NoneType',  _GFTS( 'NoneType',    False,        True,     True,     True,
-        lambda x: isinstance(x, NoneType))),
-    ('bool',      _GFTS(     'bool',    False,        True,     True,     True,
-        lambda x: isinstance(x, bool))),
-    ('float',     _GFTS(    'float',    False,        True,     True,     True,
-        lambda x: isinstance(x, float))),
-    ('int',       _GFTS(      'int',    False,        True,     True,     True,
-        lambda x: isinstance(x, IntType))),
-    ('str',       _GFTS(      'str',    False,        True,     True,     True,
-        lambda x: isinstance(x, basestring))),
-    ('dict',      _GFTS(     'dict',     True,        True,     True,     True,
-        lambda x: isinstance(x, dict))),
-    ('list',      _GFTS(     'list',     True,        True,     True,     True,
-        lambda x: isinstance(x, list))),
-    ('DataFrame', _GFTS('DataFrame',     True,       False,    False,     True,
-        lambda x: isinstance(x, DataFrame)))
-])
-
 _info = {
 
     # True values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
@@ -243,6 +220,9 @@ _info = {
 
 class _Chaperon(object):
     
+    # Supported gactfunc parameter/return types. These must be suitable for use
+    # both as Python function arguments and as command-line arguments, whether
+    # loaded from a file or converted from a simple string.
     supported_types = OrderedDict([
         #                          NAME  COMPOUND  DELIMIT   DUCTILE  FILEABLE
         ('NoneType',  _GFTS( 'NoneType',    False,    True,     True,     True,
