@@ -1,14 +1,18 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-"""GACTutil module."""
+u"""GACTutil module."""
 
+from __future__ import absolute_import
 from abc import ABCMeta
 from binascii import hexlify
 from collections import Iterable
 from collections import Mapping
+from collections import OrderedDict
 from collections import Sequence
 from collections import Set
 from contextlib import contextmanager
+from datetime import date
+from datetime import datetime
 import errno
 from gzip import GzipFile
 import inspect
@@ -22,38 +26,140 @@ import pickle
 from pkg_resources import resource_filename
 from platform import system
 from shutil import rmtree
-from sys import stdin
-from sys import stdout
+import sys
 from tempfile import mkdtemp
 from tempfile import NamedTemporaryFile
 from tokenize import generate_tokens
 from tokenize import TokenError
-import yaml
-from yaml import SafeLoader
+from types import NoneType
+
+from yaml import dump
+from yaml import load
 from yaml import YAMLError
+from yaml.constructor import SafeConstructor
+from yaml.dumper import SafeDumper
+from yaml.loader import SafeLoader
+from yaml.nodes import ScalarNode
+from yaml.representer import SafeRepresenter
 
 ################################################################################
 
 _info = {
     
-    # Data types that are considered valid as keys or valuse in a mapping object.
-    'mapping_types': (None, bool, int, float, str),
+    # Data types that are considered valid as keys or values in a mapping object.
+    u'mapping_types': (None, bool, int, float, unicode),
     
     # Config settings filename.
-    'settings-file': 'settings.yaml'
+    u'settings-file': 'settings.yaml',
+    
+    # Supported YAML scalar tags.
+    u'yaml_scalar_tags': (
+        u'tag:yaml.org,2002:null',
+        u'tag:yaml.org,2002:bool',
+        u'tag:yaml.org,2002:str',
+        u'tag:yaml.org,2002:float',
+        u'tag:yaml.org,2002:int',
+        u'tag:yaml.org,2002:timestamp'
+    ),
+    
+    # Supported YAML scalar types.
+    u'yaml_scalar_types': (
+        NoneType,
+        bool,
+        unicode,
+        str,
+        float,
+        int,
+        datetime,
+        date
+    )
 }
 
 ################################################################################
 
-# Ensure YAML loads strings as unicode, even if convertible to a byte string.
 def construct_yaml_str(self, node):
+    u"""Construct YAML string as unicode, even if convertible to a byte string."""
     return self.construct_scalar(node)
-SafeLoader.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
+
+class UniDumper(SafeDumper):
+    u"""YAML unicode-preferring dumper."""
+    pass
+
+# Ensure UniDumper represents str as str, and unicode as unicode.
+UniDumper.add_representer(str, SafeRepresenter.represent_str)
+UniDumper.add_representer(unicode, SafeRepresenter.represent_unicode)
+
+class UniLoader(SafeLoader):
+    u"""YAML unicode-preferring loader."""
+    pass
+
+# Ensure UniLoader constructs strings as unicode.
+UniLoader.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
+
+class UniConstructor(SafeConstructor):
+    u"""YAML unicode-preferring constructor."""
+    pass
+
+# Ensure UniConstructor constructs strings as unicode.
+UniConstructor.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
+
+def _init_scalar_representer_info():
+    u"""Init YAML scalar representer method info."""
+    
+    representers = dict()
+    
+    for t in UniDumper.yaml_representers:
+        if t in _info[u'yaml_scalar_types']:
+            representers[t] = UniDumper.yaml_representers[t]
+    
+    return representers
+
+def _init_scalar_resolver_info():
+    """Init YAML scalar resolver method info."""
+    
+    resolvers = dict()
+    
+    for prefix in UniLoader.yaml_implicit_resolvers:
+        for tag, regexp in UniLoader.yaml_implicit_resolvers[prefix]:
+            if tag in _info[u'yaml_scalar_tags']:
+                resolvers.setdefault(prefix, OrderedDict())
+                resolvers[prefix][tag] = regexp
+    
+    # Ensure empty string is resolved as None.
+    resolvers[u''] = OrderedDict( UniLoader.yaml_implicit_resolvers[u'~'] )
+    
+    return resolvers
+
+def _resolve_scalar(value):
+    """Resolve YAML scalar tag from string representation."""
+    
+    if not isinstance(value, basestring):
+        raise TypeError("cannot resolve value of type {!r}".format(
+            type(value).__name__))
+    
+    try:
+        key = value[0]
+    except IndexError: # Resolve empty string as None.
+        return u'tag:yaml.org,2002:null'
+    
+    resolvers = _scalar_resolver_methods.get(key, OrderedDict())
+    
+    for tag, regexp in resolvers.items():
+        if regexp.match(value):
+            return tag
+    
+    return u'tag:yaml.org,2002:str'
+
+# Init YAML scalar handlers.
+_scalar_constructor = UniConstructor()
+_scalar_representer = SafeRepresenter()
+_scalar_representer_methods = _init_scalar_representer_info()
+_scalar_resolver_methods = _init_scalar_resolver_info()
 
 ################################################################################
 
 class FrozenDict(Mapping):
-    """Hashable dictionary class.
+    u"""Hashable dictionary class.
     
     A FrozenDict can be created and accessed in the same way as a builtin dict.
     The values of a FrozenDict are recursively frozen when the FrozenDict is
@@ -196,7 +302,7 @@ class FrozenDict(Mapping):
             self.__class__.__name__))
     
     def to_dict(self, **kwargs):
-        """Return object as a mutable dict."""
+        u"""Return object as a mutable dict."""
         
         try: # Init set of checked object IDs.
             checked = kwargs.pop('memo_set')
@@ -241,7 +347,7 @@ class FrozenDict(Mapping):
         return self._data.viewvalues()
     
 class FrozenList(Sequence):
-    """Hashable list class.
+    u"""Hashable list class.
     
     A FrozenList can be created and accessed in the same way as a builtin list.
     The values of a FrozenList are recursively frozen when the FrozenList is
@@ -380,7 +486,7 @@ class FrozenList(Sequence):
                 self.__class__.__name__))
     
     def to_list(self, **kwargs):
-        """Return object as a mutable list."""
+        u"""Return object as a mutable list."""
         
         try: # Init set of checked object IDs.
             checked = kwargs.pop('memo_set')
@@ -412,12 +518,12 @@ class FrozenList(Sequence):
         return result
 
 class TextRW(object):  
-    """Abstract text reader/writer base class."""
+    u"""Abstract text reader/writer base class."""
     __metaclass__ = ABCMeta
     
     @property
     def closed(self):
-        """bool: True if file is closed; False otherwise."""
+        u"""bool: True if file is closed; False otherwise."""
         try:
             return self._handle.closed
         except AttributeError:
@@ -425,41 +531,42 @@ class TextRW(object):
     
     @property
     def name(self):
-        """str: Name of specified file or standard file object."""
+        u"""unicode: Name of specified file or standard file object."""
         return self._name
 
     @property
     def newlines(self):
-        """str or tuple: Observed newlines."""
+        u"""unicode or tuple: Observed newlines."""
         try:
             return self._handle.newlines
         except AttributeError:
             return None
     
     def __init__(self):
-        """Init text reader/writer."""
+        u"""Init text reader/writer."""
         self._closable = False
+        self._encoding = None
         self._handle = None
         self._name = None
     
     def __enter__(self):
-        """TextRW: Get reader/writer on entry to a context block."""
+        u"""TextRW: Get reader/writer on entry to a context block."""
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Close reader/writer on exit from a context block."""
+        u"""Close reader/writer on exit from a context block."""
         self.close()
         
     def close(self):
-        """Close reader/writer."""
+        u"""Close reader/writer."""
         if self._closable:
             self._handle.close()
 
 class TextReader(TextRW):
-    """Text reader class."""
+    u"""Text reader class."""
     
     def __init__(self, filepath):
-        """Init text reader.
+        u"""Init text reader.
          
          If the input `filepath` is `-`, the new object will read from standard
          input. Otherwise, the specified filepath is opened for reading. Input
@@ -467,20 +574,26 @@ class TextReader(TextRW):
          before reading.
         
         Args:
-            filepath (str): Path of input file.
+            filepath (unicode): Path of input file.
         """
         
         super(TextReader, self).__init__()
         
-        if not isinstance(filepath, basestring):
-            raise TypeError("cannot open filepath of type {!r}".format(type(filepath).__name__))
+        if not isinstance(filepath, unicode):
+            raise TypeError("filepath must be of type unicode, not {!r}".format(
+                type(filepath).__name__))
         
         # If filepath indicates standard input, 
         # prepare to read from standard input..
-        if filepath == '-':
+        if filepath == u'-':
             
-            self._name = stdin.name
-            self._handle = io.open(stdin.fileno(), mode='rb')
+            self._name = sys.stdin.name
+            self._handle = io.open(sys.stdin.fileno(), mode='rb')
+            
+            if sys.stdin.isatty():
+                self._encoding = sys.getfilesystemencoding()
+            else:
+                self._encoding = 'utf_8'
             
         # ..otherwise resolve, validate, and open the specified filepath.
         else:
@@ -496,9 +609,11 @@ class TextReader(TextRW):
                 raise IOError("not a file ~ {!r}".format(self._name))
             
             self._handle = io.open(filepath, mode='rb')
+            
+            self._encoding = 'utf_8'
         
         # Assume input is text.
-        format = 'text'
+        format = u'text'
         
         # Sample first three bytes.
         sample = self._handle.read(3)
@@ -506,15 +621,15 @@ class TextReader(TextRW):
         # If sample returned successfully, check if
         # it indicates content is GZIP-compressed.
         if len(sample) == 3:
-            magic_number = hexlify(sample[:2])
+            magic_bytes = hexlify(sample[:2])
             method = ord(sample[2:])
-            if magic_number == '1f8b': # NB: magic number for GZIP content.
+            if magic_bytes == '1f8b': # NB: magic number for GZIP content.
                 if method != 8:
                     raise ValueError("input compressed with unknown GZIP method")
-                format = 'gzip'
+                format = u'gzip'
         
         # If input is GZIP-compressed, extract and then read decompressed text..
-        if format == 'gzip':
+        if format == u'gzip':
             
             gzipfile, textfile = [None] * 2
             
@@ -550,7 +665,7 @@ class TextReader(TextRW):
             self._temp = textfile
             
             # Set handle from text temp file.
-            self._handle = io.open(textfile)
+            self._handle = io.open(textfile, encoding=self._encoding)
             
             # Start with empty buffer; sampled bytes
             # already passed to GZIP temp file.
@@ -563,7 +678,7 @@ class TextReader(TextRW):
             self._temp = None
             
             # Set text handle from input stream.
-            self._handle = io.TextIOWrapper(self._handle)
+            self._handle = io.TextIOWrapper(self._handle, encoding=self._encoding)
             
             # Extend buffer until the next line separator,
             # so buffer contains a set of complete lines.
@@ -576,11 +691,11 @@ class TextReader(TextRW):
             self._buffer = sample
     
     def __iter__(self):
-        """Get iterator for reader."""
+        u"""Get iterator for reader."""
         return iter(self.__next__, None)
     
     def __next__(self):
-        """Get next line from reader."""
+        u"""Get next line from reader."""
         
         # EOF
         if self._buffer is None:
@@ -611,22 +726,22 @@ class TextReader(TextRW):
                 # Get last line, flag EOF.
                 line, self._buffer = self._buffer, None
                 
-                if line == '':
+                if line == u'':
                     raise StopIteration
         
         return line
     
     def close(self):
-        """Close reader."""
+        u"""Close reader."""
         super(TextReader, self).close()
         _remove_tempfile(self._temp)
     
     def next(self):
-        """Get next line from reader."""
+        u"""Get next line from reader."""
         return self.__next__()
     
     def read(self, size=None):
-        """Read bytes from file."""
+        u"""Read bytes from file."""
         
         if size is not None and not isinstance(size, int):
             raise TypeError("size is not of integer type ~ {!r}".format(size))
@@ -653,7 +768,7 @@ class TextReader(TextRW):
         return chunk
     
     def readline(self, size=None):
-        """Read next line from file."""
+        u"""Read next line from file."""
         
         if size is not None and not isinstance(size, int):
             raise TypeError("size is not of integer type ~ {!r}".format(size))
@@ -664,7 +779,7 @@ class TextReader(TextRW):
         
         try:
             # Get next line from buffer.
-            line, self._buffer = self._buffer.split('\n', 1)
+            line, self._buffer = self._buffer.split(u'\n', 1)
             
         except ValueError: # Buffer lacks newline.
                 
@@ -673,7 +788,7 @@ class TextReader(TextRW):
                 self._buffer += u'{}{}'.format(self._buffer, next(self._handle))
                 
                 # Get next line from buffer.
-                line, self._buffer = self._buffer.split('\n', 1)
+                line, self._buffer = self._buffer.split(u'\n', 1)
                 
             except (StopIteration, ValueError): # EOF
                 
@@ -689,7 +804,7 @@ class TextReader(TextRW):
         return line
     
     def readlines(self, sizehint=None):
-        """Read lines from file."""
+        u"""Read lines from file."""
         
         if sizehint is not None and not isinstance(sizehint, int):
             raise TypeError("sizehint is not of integer type ~ {!r}".format(sizehint))
@@ -728,10 +843,10 @@ class TextReader(TextRW):
         return lines
 
 class TextWriter(TextRW):
-    """Text writer class."""
+    u"""Text writer class."""
     
     def __init__(self, filepath):
-        """Init text writer.
+        u"""Init text writer.
          
          If output `filepath` is set to `-`, the new object will write to
          standard output. Otherwise, the specified filepath is opened for
@@ -739,23 +854,29 @@ class TextWriter(TextRW):
          with the extension `.gz`.
         
         Args:
-            filepath (str): Path of output file.
+            filepath (unicode): Path of output file.
         """
         
         super(TextWriter, self).__init__()
         
-        if not isinstance(filepath, basestring):
-            raise TypeError("cannot open filepath of type {!r}".format(type(filepath).__name__))
+        if not isinstance(filepath, unicode):
+            raise TypeError("filepath must be of type unicode, not {!r}".format(
+                type(filepath).__name__))
         
         # Assume uncompressed output.
         compress_output = False
         
         # If filepath indicates standard output,
         # prepare to write to standard output..
-        if filepath == '-':
+        if filepath == u'-':
             
-            self._name = stdout.name
-            self._handle = stdout
+            self._name = sys.stdout.name
+            self._handle = sys.stdout
+            
+            if sys.stdout.isatty():
+                self._encoding = sys.getfilesystemencoding()
+            else:
+                self._encoding = 'utf_8'
             
         # ..otherwise resolve, validate, and open the specified filepath.
         else:
@@ -765,47 +886,49 @@ class TextWriter(TextRW):
             filepath = resolve_path(filepath)
             self._name = relpath(filepath)
             
-            if filepath.endswith('.gz'):
+            if filepath.endswith(u'.gz'):
                  compress_output = True
             
             self._handle = io.open(filepath, mode='wb')
+            
+            self._encoding = 'utf_8'
         
         if compress_output:
             self._handle = GzipFile(fileobj=self._handle)
     
     def write(self, x):
-        """Write string."""
-        self._handle.write(x)
+        u"""Write string."""
+        self._handle.write( x.encode(self._encoding) )
     
     def writelines(self, sequence):
-        """Write lines."""
-        self._handle.writelines(sequence)
+        u"""Write lines."""
+        self._handle.writelines([ x.encode(self._encoding) for x in sequence ])
 
 ################################################################################
 
 def _read_about():
-    """Read information about this package."""
-    about_file = os.path.join('data', 'about.p')
-    about_path = resource_filename('gactutil', about_file)
+    u"""Read information about this package."""
+    about_file = os.path.join(u'data', u'about.p')
+    about_path = resource_filename(u'gactutil', about_file)
     with open(about_path, 'r') as fh:
         about_info = pickle.load(fh)
     return about_info
 
 def _read_setting(key):
-    """Read a single package setting."""
+    u"""Read a single package setting."""
     info = _read_settings()
     return info[key]
 
 def _read_settings():
-    """Read package settings file."""
+    u"""Read package settings file."""
     about = _read_about()
-    settings_file = _info['settings-file']
-    settings_path = os.path.join(about['config_dir'], settings_file)
+    settings_file = _info[u'settings-file']
+    settings_path = os.path.join(about[u'config_dir'], settings_file)
     
     if os.path.isfile(settings_path):
         try:
-            with open(settings_path) as fh:
-                config_info = yaml.safe_load(fh)
+            with TextReader(settings_path) as fh:
+                config_info = uniload(fh)
         except (IOError, YAMLError):
             raise RuntimeError("failed to read package settings file ~ {!r}".format(settings_file))
     else:
@@ -813,7 +936,7 @@ def _read_settings():
     return(config_info)
 
 def _remove_tempfile(filepath):
-    """Remove the specified temporary file."""
+    u"""Remove the specified temporary file."""
     
     if filepath is not None:
         try:
@@ -822,11 +945,11 @@ def _remove_tempfile(filepath):
         except OSError:
             warn("failed to remove temp file ~ {!r}".format(filepath), RuntimeWarning)
         except TypeError:
-            raise TypeError("failed to remove temp file of type {} ~ {!r}".format(
+            raise TypeError("failed to remove temp file of type {!r} ~ {!r}".format(
                 type(filepath).__name__, filepath))
 
 def _setup_about(setup_info):
-    """Setup info about package.
+    u"""Setup info about package.
     
     Outputs a package data file in YAML format with information about package.
     
@@ -835,12 +958,12 @@ def _setup_about(setup_info):
     
     # Validate caller.
     caller_file, caller_func = [ (inspect.stack()[1])[i] for i in (1, 3) ]
-    if caller_file != 'setup.py' or caller_func != '<module>':
+    if caller_file != u'setup.py' or caller_func != u'<module>':
         raise RuntimeError("{!r} should only be called during GACTutil "
             "package setup".format(inspect.stack()[0][3]))
     
     # Set keys common to setup info and about info.
-    common_keys = ('name', 'version')
+    common_keys = (u'name', u'version')
     
     # Set common info from setup info.
     about_info = { k: setup_info[k] for k in common_keys }
@@ -848,27 +971,27 @@ def _setup_about(setup_info):
     # Set config directory path for this platform.
     platform_system = system()
     if platform_system in ('Linux', 'Darwin'):
-        home = expanduser('~')
+        home = expanduser(u'~')
         if platform_system == 'Linux':
-            about_info['config_dir'] = os.path.join(home, '.config', 'gactutil')
+            about_info['config_dir'] = os.path.join(home, u'.config', u'gactutil')
         elif platform_system == 'Darwin':
-            about_info['config_dir'] = os.path.join(home, 'Library',
-            'Application Support', 'GACTutil')
+            about_info['config_dir'] = os.path.join(home, u'Library',
+            u'Application Support', u'GACTutil')
     elif platform_system == 'Windows':
         appdata = os.getenv('APPDATA')
-        about_info['config_dir'] = os.path.join(appdata, 'GACTutil')
+        about_info[u'config_dir'] = os.path.join(appdata, u'GACTutil')
         if appdata is None or not os.path.isdir(appdata):
             raise RuntimeError("valid %APPDATA% not found")
     else:
         raise RuntimeError("unrecognised platform ~ {!r}".format(platform_system))
     
     # Ensure data directory exists.
-    data_dir = os.path.join('gactutil', 'data')
+    data_dir = os.path.join(u'gactutil', u'data')
     if not os.path.isdir(data_dir):
         os.makedirs(data_dir)
     
     # Write info about package.
-    about_file = os.path.join(data_dir, 'about.p')
+    about_file = os.path.join(data_dir, u'about.p')
     with open(about_file, 'w') as fh:
         pickle.dump(about_info, fh)
 
@@ -885,51 +1008,96 @@ def _truncate_string(s, length=16):
     """Truncate a string to the given length."""
     
     if not isinstance(s, basestring):
-        raise TypeError("truncation object must be of type string")
+        raise TypeError("truncation object must be of type 'string'")
     if not isinstance(length, int):
-        raise TypeError("truncation length must be of type int")
+        raise TypeError("truncation length must be of type 'int'")
     if length < 0:
         raise ValueError("invalid truncation length ~ {!r}".format(length))
     
-    return s if len(s) <= length else '{}...'.format(s[:(length-3)])
+    template = u'{}...' if isinstance(s, unicode) else '{}...'
+    return s if len(s) <= length else template.format(s[:(length-3)])
 
 def _validate_mapping(mapping):
-    """Validate a mapping object."""
+    u"""Validate a mapping object."""
     for k in mapping:
         
-        if not isinstance(k, _info['mapping_types']):
-            raise TypeError("mapping key {!r} has invalid type ~ {!r}".format(str(k), type(k).__name__))
+        if not isinstance(k, _info[u'mapping_types']):
+            raise TypeError("mapping key {!r} has invalid type ~ {!r}".format(
+                unicode(k), type(k).__name__))
         
         try:
             x = mapping[k]
         except KeyError:
-            raise TypeError("mapping has invalid type ~ {!r}".format(type(mapping).__name__))
+            raise TypeError("mapping has invalid type ~ {!r}".format(
+                type(mapping).__name__))
         
-        if not isinstance(x, _info['mapping_types']):
-            raise TypeError("mapping value {!r} has invalid type ~ {!r}".format(str(x), type(x).__name__))
+        if not isinstance(x, _info[u'mapping_types']):
+            raise TypeError("mapping value {!r} has invalid type ~ {!r}".format(
+                unicode(x), type(x).__name__))
 
 def _write_setting(key, value):
-    """Write a single package setting."""
+    u"""Write a single package setting."""
     info = _read_settings_file()
     info[key] = value    
     _write_settings_file(info, path)
 
 def _write_settings(config_info):
-    """Write package settings file."""
+    u"""Write package settings file."""
     about = _read_about()
-    settings_file = _info['settings-file']
-    settings_path = os.path.join(about['config_dir'], settings_file)
+    settings_file = _info[u'settings-file']
+    settings_path = os.path.join(about[u'config_dir'], settings_file)
     try:
-        with open(settings_path, 'w') as fh:
-            yaml.safe_dump(config_info, fh, default_flow_style=False,
-                allow_unicode=True, encoding='utf-8')
+        with TextWriter(settings_path) as fh:
+            unidump(config_info, fh, default_flow_style=False, width=sys.maxint)
     except (IOError, YAMLError):
         raise RuntimeError("failed to write package settings file ~ {!r}".format(settings_file))
 
 ################################################################################
 
+def fsdecode(s):
+    """Decode byte strings to unicode with file system encoding.
+    
+    This function is modelled after its namesake in the Python 3 os.path module.
+    """
+    if isinstance(s, str):
+        return s.decode( sys.getfilesystemencoding() )
+    elif isinstance(s, unicode):
+        return s
+    else:
+        raise TypeError("argument is not of string type ~ {!r}".format(s))
+
+def fsencode(s):
+    """Encode byte strings from unicode with file system encoding.
+    
+    This function is modelled after its namesake in the Python 3 os.path module.
+    """
+    if isinstance(s, unicode):
+        return s.encode( sys.getfilesystemencoding() )
+    elif isinstance(s, str):
+        return s
+    else:
+        raise TypeError("argument is not of string type ~ {!r}".format(s))
+
+def is_multiline_string(string):
+    """Test if object is a multiline string."""
+    
+    known_line_breaks = (u'\r\n', u'\n', u'\r')
+    
+    if isinstance(string, basestring):
+        
+        for line_break in known_line_breaks:
+            
+            if string.endswith(line_break):
+                string = string[:-len(line_break)]
+                break
+        
+        if any( line_break in string for line_break in known_line_breaks ):
+            return True
+    
+    return False
+
 def resolve_path(path, start=None):
-    """Resolve the specified path.
+    u"""Resolve the specified path.
     
     By default, the specified path is modified by expanding the home directory
     and any environment variables, resolving symbolic links, and returning the
@@ -937,12 +1105,15 @@ def resolve_path(path, start=None):
     is given relative to `start`.
     
     Args:
-        path (str): A system path.
-        start (str): Optional starting point for the resolved path.
+        path (unicode): A system path.
+        start (unicode): Optional starting point for the resolved path.
     
     Returns:
-        str: Resolved system path.
+        unicode: Resolved system path.
     """
+    if not isinstance(path, unicode):
+        raise TypeError("path must be of type unicode, not {!r}".format(
+            type(path).__name__))
     resolved_path = realpath( expandvars( expanduser(path) ) )
     if start is not None:
         start = realpath( expandvars( expanduser(start) ) )
@@ -950,7 +1121,7 @@ def resolve_path(path, start=None):
     return resolved_path
 
 def resolve_paths(paths, start=None):
-    """Resolve the specified paths.
+    u"""Resolve the specified paths.
     
     By default, the specified paths are modified by expanding the home directory
     and any environment variables, resolving symbolic links, and returning the
@@ -959,7 +1130,7 @@ def resolve_paths(paths, start=None):
     
     Args:
         paths (list): System paths.
-        start (str): Optional starting point for the resolved paths.
+        start (unicode): Optional starting point for the resolved paths.
     
     Returns:
         dict: Mapping of input paths to their resolved form.
@@ -970,15 +1141,15 @@ def resolve_paths(paths, start=None):
     return resolved_paths
 
 @contextmanager
-def temporary_directory(suffix='', prefix='tmp', name=None, dir=None,
+def temporary_directory(suffix=u'', prefix=u'tmp', name=None, dir=None,
     delete=True):
-    """Create temporary directory."""
+    u"""Create temporary directory."""
     
     # If a temp directory name was specified, ensure it exists..
     if name is not None:
         
         # Verify temp directory name is a valid pathname component.
-        if os.path.split(name)[0] != '':
+        if os.path.split(name)[0] != u'':
             raise ValueError("temp directory name must be a valid pathname component")
         
         # Set temp directory name.
@@ -1015,5 +1186,97 @@ def temporary_directory(suffix='', prefix='tmp', name=None, dir=None,
             except OSError:
                 warn("failed to delete temp directory ~ {!r}".format(twd),
                     RuntimeWarning)
+
+def unidump(data, stream=None, **kwds):
+    u"""Dump data to YAML unicode stream."""
+    
+    fixed = { 'Dumper': UniDumper, 'allow_unicode': True, 'encoding': None }
+    
+    for k, x in fixed.items():
+        if k in kwds:
+            raise RuntimeError("cannot set reserved keyword argument {!r}".format(k))
+        kwds[k] = x
+    
+    return dump(data, stream=stream, **kwds)
+
+def uniload(stream):
+    u"""Load data from YAML unicode stream."""
+    return load(stream, Loader=UniLoader)
+
+def unidump_scalar(data, stream=None):
+    u"""Dump scalar to YAML unicode stream."""
+    
+    try:
+        method = _scalar_representer_methods[type(data)]
+    except KeyError:
+        raise TypeError("cannot dump data of type {!r}".format(type(data).__name__))
+    
+    if is_multiline_string(data):
+        raise ValueError("cannot dump multiline string ~ {!r}".format(data))
+    
+    node = method(_scalar_representer, data)
+    
+    if stream is not None:
+        stream.write(u'{}{}'.format(node.value.rstrip(u'\n'), u'\n'))
+    else:
+        return node.value
+
+def uniload_scalar(stream):
+    u"""Load scalar from YAML unicode stream."""
+    
+    if isinstance(stream, basestring):
+        
+        lines = stream.splitlines()
+        
+    else:
+        
+        try:
+            lines = [ line for line in stream ]
+        except TypeError:
+            raise TypeError("cannot load scalar from input of type {!r}".format(
+                type(stream).__name__))
+    
+    # Strip YAML comments and flanking whitespace from each line.
+    lines = [ ystrip(line) for line in lines ]
+    
+    # Strip trailing empty lines.
+    while len(lines) > 0 and lines[-1] == u'':
+        lines.pop()
+    
+    # Allow for document end indicator.
+    if len(lines) > 2 or ( len(lines) == 2 and lines[1] != u'...' ):
+        raise ValueError("cannot load scalar from multiline input")
+    
+    try: # Take scalar string representation from first line.
+        value = lines[0]
+    except IndexError: # Resolve empty stream as None.
+        return None
+    
+    # Resolve and construct scalar object from string representation.
+    tag = _resolve_scalar(value)
+    node = ScalarNode(tag, value)
+    return _scalar_constructor.construct_object(node)
+
+def ystrip(line):
+    u"""Strip YAML comments and flanking whitespace from a single-line string."""
+    
+    if not isinstance(line, basestring):
+        raise TypeError("cannot strip object of type {!r}".format(
+                type(line).__name__))
+    
+    if is_multiline_string(line):
+        raise ValueError("cannot strip multiline string ~ {!r}".format(line))
+    
+    try: # Strip comments.
+        j = line.index(u'#')
+    except ValueError:
+        pass
+    else:
+        line = line[:j]
+    
+    # Strip leading/trailing whitespace.
+    line = line.strip()
+    
+    return line
 
 ################################################################################

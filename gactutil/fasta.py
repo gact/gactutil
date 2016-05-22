@@ -1,6 +1,6 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-"""GACTutil FASTA module."""
+u"""GACTutil FASTA module."""
 
 from Bio import SeqIO
 
@@ -9,10 +9,10 @@ from gactutil.gaction import gactfunc
 
 @gactfunc
 def get_fasta_headers(infile):
-    """Get FASTA headers.
+    u"""Get FASTA headers.
     
     Args:
-        infile (str): Input FASTA file.
+        infile (unicode): Input FASTA file.
         
     Returns:
         list: FASTA headers.
@@ -22,11 +22,11 @@ def get_fasta_headers(infile):
     return headers
 
 def recode_fasta(infile, outfile, mapping):
-    """Recode FASTA data.
+    u"""Recode FASTA data.
     
     Args:
-        infile (str): Input FASTA file.
-        outfile (str): Output FASTA file.
+        infile (unicode): Input FASTA file.
+        outfile (unicode): Output FASTA file.
         mapping (dict): Mapping of old item names to new names.
     """
     get_fasta(infile)

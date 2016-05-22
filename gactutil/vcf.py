@@ -1,6 +1,6 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-"""GACTutil VCF module.
+u"""GACTutil VCF module.
 
 This module contains functions and utilities for handling data in VCF format.
 
@@ -16,68 +16,69 @@ import sys
 
 import vcf
 
+from gactutil import fsencode
 from gactutil.gaction import gactfunc
 
 ################################################################################
 
 class CategoricalFilter(vcf.filters.Base):
-    """Base class for categorical variant filters."""
+    u"""Base class for categorical variant filters."""
     
-    name = 'CategoricalFilter'
+    name = u'CategoricalFilter'
     
     def __init__(self, *args):
-        """Create filter without arguments."""
-        if self.__class__.__name__ == 'CategoricalFilter':
+        u"""Create filter without arguments."""
+        if self.__class__.__name__ == u'CategoricalFilter':
             raise NotImplementedError("CategoricalFilter is an abstract class")
     
     def filter_name(self):
-        """Return variant-type filter name."""
+        u"""Return variant-type filter name."""
         return self.name
 
 class MnpOnly(CategoricalFilter):
-    """Filter class for MNP variants."""
+    u"""Filter class for MNP variants."""
     
-    name = 'mnp-only'
+    name = u'mnp-only'
     
     def __call__(self, record):
-        """Pass if MNP variant, 'FAIL' otherwise."""
+        u"""Pass if MNP variant, 'FAIL' otherwise."""
         
         ref_allele  = record.REF
-        alt_alleles = [ str(x) for x in record.ALT ]
+        alt_alleles = [ unicode(str(x), encoding='utf_8') for x in record.ALT ]
         
         if record.is_monomorphic:
-            return 'FAIL'
+            return u'FAIL'
         
         if record.is_sv:
-            return 'FAIL'
+            return u'FAIL'
         
         alleles = [ref_allele] + alt_alleles
         
-        if any( c not in ['A', 'C', 'G', 'T', 'N', '*'] 
+        if any( c not in [u'A', u'C', u'G', u'T', u'N', u'*']
             for allele in alleles for c in allele.upper() ):
-            return 'FAIL'
+            return u'FAIL'
         
         if len(ref_allele) == 1:
-            return 'FAIL'
+            return u'FAIL'
         
         if any( len(a) != len(ref_allele) for a in alt_alleles ):
-            return 'FAIL'
+            return u'FAIL'
         
         return None
 
 class SvOnly(CategoricalFilter):
-    """Filter class for structural variants."""
+    u"""Filter class for structural variants."""
 
-    name = 'sv-only'
+    name = u'sv-only'
 
     def __call__(self, record):
-        """Pass if structural variant, 'FAIL' otherwise."""
+        u"""Pass if structural variant, 'FAIL' otherwise."""
         
         if record.is_monomorphic:
-            return 'FAIL'
+            return u'FAIL'
         
         if not record.is_sv:
-            return 'FAIL'
+            return u'FAIL'
         
         return None
 
@@ -86,39 +87,44 @@ class SvOnly(CategoricalFilter):
 @gactfunc
 def filter_vcf_variants(infile, outfile, filters, no_short_circuit=False, 
     no_filtered=False):
-    """Filter VCF.
+    u"""Filter VCF.
     
     Args:
-        infile (str): Input VCF file.
-        outfile (str): Output filtered VCF file.
+        infile (unicode): Input VCF file.
+        outfile (unicode): Output filtered VCF file.
         filters (list): Filter specifications.
         no_short_circuit (bool): Apply all filters to each site.
         no_filtered (bool): Output only sites passing all filters.
     """
     
     # Get core options of PyVCF filter script.
-    known_core_options = ('--output', '--no-short-circuit', '--no-filtered')
+    known_core_options = (u'--output', u'--no-short-circuit', u'--no-filtered')
     
     # Assemble specified core options.
     core_options = list()
     if no_short_circuit:
-        core_options.append('--no-short-circuit')
+        core_options.append(u'--no-short-circuit')
     if no_filtered:
-        core_options.append('--no-filtered')
+        core_options.append(u'--no-filtered')
+    
+    if any( not isinstance(filter_spec, basestring) for filter_spec in filters ):
+        raise TypeError("filters must be of type unicode, not {!r}".format(
+            type(filter_spec).__name__))
     
     # Assemble filter specification from individual parts.
     filter_spec = [ token for filter_spec in filters 
-        for token in str(filter_spec).split() ]
+        for token in filter_spec.split() ]
     
     if any( x in filter_spec for x in known_core_options ):
         raise ArgumentError("filter specification contains core options")
     
     # Assemble command for PyVCF filter script.
-    command = ['vcf_filter.py'] + core_options + [infile] + filter_spec
+    command = [u'vcf_filter.py'] + core_options + [infile] + filter_spec
+    command = [ fsencode(x) for x in command ]
     
     # Run PyVCF filter script.
     try:
-        with open(outfile, 'w') as fh:
+        with TextWriter(outfile) as fh:
             process = Popen(command, stdout=fh)
             process.wait()
     except (CalledProcessError, IOError, OSError, RuntimeError, ValueError) as e:

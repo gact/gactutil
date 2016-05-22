@@ -1,7 +1,8 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-"""GACTutil genome module."""
+u"""GACTutil genome module."""
 
+from __future__ import absolute_import
 from collections import deque
 from collections import OrderedDict
 from datetime import datetime
@@ -10,19 +11,21 @@ from os.path import getmtime
 from os.path import isfile
 import re
 from string import Template
+import sys
 from textwrap import dedent
 import time
 
 from BCBio import GFF
 from Bio import SeqIO
-import yaml
-from yaml import YAMLError
 
+from gactutil import TextReader
+from gactutil import TextWriter
+from gactutil import temporary_directory
+from gactutil import unidump
+from gactutil import uniload
+from gactutil import YAMLError
 from gactutil.gaction import gactfunc
 from gactutil.ncbi import check_efetch
-from gactutil import SafeLoader # unicode-only YAML loader
-from gactutil import TextReader
-from gactutil import temporary_directory
 
 ################################################################################
 
@@ -30,59 +33,59 @@ _info = {
 
     # Normalised representations of yeast chromosomes. These
     # were chosen to sort consistently in most circumstances.
-    'norm_chr': (
-      'chr01',
-      'chr02',
-      'chr03',
-      'chr04',
-      'chr05',
-      'chr06',
-      'chr07',
-      'chr08',
-      'chr09',
-      'chr10',
-      'chr11',
-      'chr12',
-      'chr13',
-      'chr14',
-      'chr15',
-      'chr16',
-      'chr17',
-      'chr18'
+    u'norm_chr': (
+      u'chr01',
+      u'chr02',
+      u'chr03',
+      u'chr04',
+      u'chr05',
+      u'chr06',
+      u'chr07',
+      u'chr08',
+      u'chr09',
+      u'chr10',
+      u'chr11',
+      u'chr12',
+      u'chr13',
+      u'chr14',
+      u'chr15',
+      u'chr16',
+      u'chr17',
+      u'chr18'
     ),
     
     # Mapping of chromosome labels to normalised representation.
     # NB: this assumes chromosome name simplification has been
     # done (removing any leading zeros), and that the given
     # chromosome has been uppercased.
-    'chr2norm': {
-      '1':  'chr01',     'I': 'chr01',
-      '2':  'chr02',    'II': 'chr02',
-      '3':  'chr03',   'III': 'chr03',
-      '4':  'chr04',    'IV': 'chr04',
-      '5':  'chr05',     'V': 'chr05',
-      '6':  'chr06',    'VI': 'chr06',
-      '7':  'chr07',   'VII': 'chr07',
-      '8':  'chr08',  'VIII': 'chr08',
-      '9':  'chr09',    'IX': 'chr09',
-      '10': 'chr10',     'X': 'chr10',
-      '11': 'chr11',    'XI': 'chr11',
-      '12': 'chr12',   'XII': 'chr12',
-      '13': 'chr13',  'XIII': 'chr13',
-      '14': 'chr14',   'XIV': 'chr14',
-      '15': 'chr15',    'XV': 'chr15',
-      '16': 'chr16',   'XVI': 'chr16',
-      '17': 'chr17',    'MT': 'chr17',  'MITO': 'chr17',
-      '2-MICRON': 'chr18', '2MICRON': 'chr18'
+    u'chr2norm': {
+      u'1':  u'chr01',    u'I': u'chr01',
+      u'2':  u'chr02',   u'II': u'chr02',
+      u'3':  u'chr03',  u'III': u'chr03',
+      u'4':  u'chr04',   u'IV': u'chr04',
+      u'5':  u'chr05',    u'V': u'chr05',
+      u'6':  u'chr06',   u'VI': u'chr06',
+      u'7':  u'chr07',  u'VII': u'chr07',
+      u'8':  u'chr08', u'VIII': u'chr08',
+      u'9':  u'chr09',   u'IX': u'chr09',
+      u'10': u'chr10',    u'X': u'chr10',
+      u'11': u'chr11',   u'XI': u'chr11',
+      u'12': u'chr12',  u'XII': u'chr12',
+      u'13': u'chr13', u'XIII': u'chr13',
+      u'14': u'chr14',  u'XIV': u'chr14',
+      u'15': u'chr15',   u'XV': u'chr15',
+      u'16': u'chr16',  u'XVI': u'chr16',
+      u'17': u'chr17',   u'MT': u'chr17',  u'MITO': u'chr17',
+      u'2-MICRON': u'chr18', u'2MICRON': u'chr18'
     },
     
     # Expected pattern of sequence identifiers beginning with a GI number.
-    'pattern': {
-        'gi': re.compile('^gi[|](\d+)[|].+')
+    u'pattern': {
+        u'gi': re.compile(u'^gi[|](\d+)[|].+')
     },
     
     # GFF header appendix template for genome prep output GFF file.
-    'header_appendix': dedent('''\
+    u'header_appendix': dedent(u'''\
     # Original file created by Saccharomyces Genome Database <www.yeastgenome.org>.
     # This version created at ${TIMEPOINT}. 
     # Modified from the original at GACT <www2.le.ac.uk/colleges/medbiopsych/research/gact>.
@@ -97,7 +100,7 @@ _info = {
 ################################################################################
 
 class GenomeIndex(object):
-    """Genome index class.
+    u"""Genome index class.
     
     Handles reading, writing, and updating a genome index YAML file.
     """
@@ -105,62 +108,62 @@ class GenomeIndex(object):
     # Filename patterns of known genome data files.
     pattern = {
         
-        'COMMON': {
+        u'COMMON': {
             # Captures: <strain>
-            'README': re.compile('^([^.]+)[.]README$'),
+            u'README': re.compile(u'^([^.]+)[.]README$'),
             
             # Captures: <strain>_<ID>
-            'prepped-reference': re.compile('^SGD_([^_]+)_([^_]+)[.]fa$'),
+            u'prepped-reference': re.compile(u'^SGD_([^_]+)_([^_]+)[.]fa$'),
             
             # Captures: <strain>_<ID>
-            'prepped-annotation': re.compile('^SGD_([^_]+)_([^_]+)[.]gff$'),
+            u'prepped-annotation': re.compile(u'^SGD_([^_]+)_([^_]+)[.]gff$'),
         },
 
-        'S288C': {
+        u'S288C': {
             # Captures: <version>_<date>
-            'coding-sequence': re.compile('^orf_coding_all_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
+            u'coding-sequence': re.compile(u'^orf_coding_all_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
             
             # Captures: <version>_<date>
-            'gene-association': re.compile('^gene_association_((R\d+-\d+-\d+)_(\d{8}))[.]sgd$'),
+            u'gene-association': re.compile(u'^gene_association_((R\d+-\d+-\d+)_(\d{8}))[.]sgd$'),
             
             # Captures: <version>_<date>
-            'reference': re.compile('^(S288C)_reference_sequence_((R\d+-\d+-\d+)_(\d{8}))[.]fsa$'),
+            u'reference': re.compile(u'^(S288C)_reference_sequence_((R\d+-\d+-\d+)_(\d{8}))[.]fsa$'),
             
             # Captures: <version>_<date>
-            'annotation': re.compile('^saccharomyces_cerevisiae_((R\d+-\d+-\d+)_(\d{8}))[.]gff$'),
+            u'annotation': re.compile(u'^saccharomyces_cerevisiae_((R\d+-\d+-\d+)_(\d{8}))[.]gff$'),
             
             # Captures: <version>_<date>
-            'non-feature': re.compile('^NotFeature_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
+            u'non-feature': re.compile(u'^NotFeature_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
             
             # Captures: <version>_<date>
-            'other-feature': re.compile('^other_features_genomic_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
+            u'other-feature': re.compile(u'^other_features_genomic_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
             
             # Captures: <version>_<date>
-            'peptide-sequence': re.compile('^orf_trans_all_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
+            u'peptide-sequence': re.compile(u'^orf_trans_all_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$'),
             
             # Captures: <version>_<date>
-            'rna-sequence': re.compile('^rna_coding_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$') 
+            u'rna-sequence': re.compile(u'^rna_coding_((R\d+-\d+-\d+)_(\d{8}))[.]fasta$')
         }, 
         
-        'NON-S288C': {
+        u'NON-S288C': {
             
             # Captures: <strain>_<ID>
-            'coding-sequence': re.compile('^([^_]+)_([^_]+)_cds[.]fsa(?:[.]gz)?$'),
+            u'coding-sequence': re.compile(u'^([^_]+)_([^_]+)_cds[.]fsa(?:[.]gz)?$'),
             
              # Captures: <strain>_<institution>_<year>_<ID>
-            'reference': re.compile('^([^_]+)_([^_]+)_([^_]+)_([^_]+)[.]fsa(?:[.]gz)?$'),
+            u'reference': re.compile(u'^([^_]+)_([^_]+)_([^_]+)_([^_]+)[.]fsa(?:[.]gz)?$'),
             
             # Captures: <strain>_<ID>
-            'annotation': re.compile('^([^_]+)_([^_]+)[.]gff(?:[.]gz)?$'),
+            u'annotation': re.compile(u'^([^_]+)_([^_]+)[.]gff(?:[.]gz)?$'),
             
             # Captures: <strain>
-            'indel': re.compile('^(.+)[.]indel[.]gatk[.]vcf(?:[.]gz)?$'),
+            u'indel': re.compile(u'^(.+)[.]indel[.]gatk[.]vcf(?:[.]gz)?$'),
             
             # Captures: <strain>_<ID>
-            'peptide-sequence': re.compile('^([^_]+)_([^_]+)_pep[.]fsa(?:[.]gz)?$'),
+            u'peptide-sequence': re.compile(u'^([^_]+)_([^_]+)_pep[.]fsa(?:[.]gz)?$'),
             
             # Captures: <strain>
-            'snp': re.compile('^(?!.+(?:[.]indel))(.+)[.]gatk[.]vcf(?:[.]gz)?$')
+            u'snp': re.compile(u'^(?!.+(?:[.]indel))(.+)[.]gatk[.]vcf(?:[.]gz)?$')
         }
     } 
     
@@ -168,38 +171,42 @@ class GenomeIndex(object):
     tags = {
     
         # Info about genome.
-        'info': ('date', 'name', 'ID', 'institution', 'strain'),
+        u'info': (u'date', u'name', u'ID', u'institution', u'strain'),
         
         # Files in genome.
-        'files': ('annotation', 'coding-sequence', 'gene-association', 'reference', 
-            'indel', 'non-feature', 'other-feature', 'peptide-sequence', 'snp',
-            'prepped-annotation', 'prepped-reference', 'README', 'rna-sequence')
+        u'files': (u'annotation', u'coding-sequence', u'gene-association',
+            u'reference', u'indel', u'non-feature', u'other-feature',
+            u'peptide-sequence', u'snp', u'prepped-annotation',
+            u'prepped-reference', u'README', u'rna-sequence')
     }
     
-    filename = 'index.yaml'
+    filename = u'index.yaml'
     
-    required = ('reference', 'annotation')
+    required = (u'reference', u'annotation')
     
     @classmethod
     def _get_index_path(cls, directory):
-        """Get path of genome index from genome directory path."""
+        u"""Get path of genome index from genome directory path."""
+        if not isinstance(directory, unicode):
+            raise TypeError("directory path must be of type unicode, not {!r}".format(
+                type(directory).__name__))
         return os.path.join( os.path.normpath(directory), GenomeIndex.filename )
         
     @property
     def files(self):
-        """dict: Dictionary of genome file info."""
-        return self._data['files']
+        u"""dict: Dictionary of genome file info."""
+        return self._data[u'files']
     
     @property
     def info(self):
-        """dict: Dictionary of genome info."""
-        return self._data['info']
+        u"""dict: Dictionary of genome info."""
+        return self._data[u'info']
         
     def __init__(self, directory):
-        """Init genome index.
+        u"""Init genome index.
         
         Args:
-            directory (str): Path of genome directory.
+            directory (unicode): Path of genome directory.
         """
         
         # Get path of index file.
@@ -214,23 +221,28 @@ class GenomeIndex(object):
         # If index already exists, load it and count any
         # previously-indexed files that are missing.
         if os.path.isfile(index_path):
-            self.load(directory)
-            indexed_paths = [ os.path.join(directory, x)
-                for x in self._data['files'].values() ]
-            num_missing = sum([ int( not os.path.isfile(x) )
-                for x in indexed_paths ])
+            
+            try:
+                self.load(directory)
+            except RuntimeError:
+                os.remove(index_path)
+            else:
+                indexed_paths = [ os.path.join(directory, x)
+                    for x in self._data[u'files'].values() ]
+                num_missing = sum([ int( not os.path.isfile(x) )
+                    for x in indexed_paths ])
         
         # Update index if not found, or if there are newer files,
         # or if any previously-indexed files are missing.
-        if ( not isfile(index_path) or num_missing > 0 or
+        if ( not os.path.isfile(index_path) or num_missing > 0 or
             any( getmtime(x) > getmtime(index_path) for x in file_paths ) ):
             self.update(directory)
         
     def dump(self, directory):
-        """Dump genome index to genome directory.
+        u"""Dump genome index to genome directory.
         
         Args:
-            directory (str): Path of genome directory to which genome index
+            directory (unicode): Path of genome directory to which genome index
                 will be dumped.
         """
         
@@ -238,16 +250,15 @@ class GenomeIndex(object):
         
         try:
             with open(index_path, 'w') as fh:
-                yaml.safe_dump(self._data, fh, default_flow_style=False,
-                    allow_unicode=True, encoding='utf-8')
+                unidump(self._data, fh, default_flow_style=False, width=sys.maxint)
         except (IOError, YAMLError):
             raise RuntimeError("failed to dump genome index to directory ~ {!r}".format(directory))
     
     def load(self, directory):
-        """Load genome index from genome directory.
+        u"""Load genome index from genome directory.
         
         Args:
-            directory (str): Path of genome directory from which genome index
+            directory (unicode): Path of genome directory from which genome index
                 will be loaded.
         """
         
@@ -255,24 +266,28 @@ class GenomeIndex(object):
         
         try:
             with open(index_path, 'r') as fh:
-                self._data = yaml.safe_load(fh)
+                self._data = uniload(fh)
         except (IOError, YAMLError):
             raise RuntimeError("failed to load genome index from directory ~ {!r}".format(directory))
         
-        if ( any( k not in GenomeIndex.tags for k in self._data ) or
+        if ( self._data is None or any( k not in GenomeIndex.tags for k in self._data ) or
             any( a not in GenomeIndex.tags[k] for k in self._data for a in self._data[k] ) ):
             raise RuntimeError("failed to load invalid genome index from directory ~ {!r}".format(directory))
 
     def update(self, directory):
-        """Update genome index for given genome directory.
+        u"""Update genome index for given genome directory.
         
         Args:
-            directory (str): Path of genome directory for which this genome index
+            directory (unicode): Path of genome directory for which this genome index
                 will be updated.
         """
         
         # Init index data.
-        self._data = { 'info': dict(), 'files': dict() }
+        self._data = { u'info': dict(), u'files': dict() }
+        
+        if not isinstance(directory, unicode):
+            raise TypeError("directory path must be of type unicode, not {!r}".format(
+                type(directory).__name__))
         
         # Get list of files in genome directory.
         files = [ x for x in os.listdir(directory)
@@ -298,7 +313,7 @@ class GenomeIndex(object):
                 del gmatch[k]
         
         # Get genome type cues ('S288C' or 'NON-S288C') from matching files.
-        genome_type_cues = [ k for k in gmatch.keys() if k != 'COMMON' ]
+        genome_type_cues = [ k for k in gmatch.keys() if k != u'COMMON' ]
         
         # Set genome type if available cues clearly indicate one type of genome.
         if len(genome_type_cues) == 1:
@@ -313,47 +328,49 @@ class GenomeIndex(object):
             raise RuntimeError("cannot update genome index - required files not found")
         
         # Update genome info.
-        if genome_type == 'S288C':
+        if genome_type == u'S288C':
             
-            genome_match = gmatch['S288C']['reference']
-            self._data['info']['strain'] = genome_match.group(1)
-            self._data['info']['institution'] = 'SGD'
-            self._data['info']['ID'] = genome_match.group(3)
-            self._data['info']['date'] = genome_match.group(4)
-        
-        elif genome_type == 'NON-S288C':
+            genome_match = gmatch[u'S288C'][u'reference']
+            self._data[u'info'][u'strain'] = genome_match.group(1)
+            self._data[u'info'][u'institution'] = u'SGD'
+            self._data[u'info'][u'ID'] = genome_match.group(3)
+            self._data[u'info'][u'date'] = genome_match.group(4)
             
-            genome_match = gmatch['NON-S288C']['reference']
-            self._data['info']['strain'] = genome_match.group(1)
-            self._data['info']['institution'] = genome_match.group(2)
-            self._data['info']['ID'] = genome_match.group(4)
+        elif genome_type == u'NON-S288C':
             
-            if 'README' in gmatch['COMMON']:
+            genome_match = gmatch[u'NON-S288C'][u'reference']
+            self._data[u'info'][u'strain'] = genome_match.group(1)
+            self._data[u'info'][u'institution'] = genome_match.group(2)
+            self._data[u'info'][u'ID'] = genome_match.group(4)
+            
+            if u'README' in gmatch[u'COMMON']:
                 readme = _load_genome_readme( os.path.join(directory,
-                    gmatch['COMMON']['README'].group(0)) )
-                self._data['info']['date'] = readme['date'].strftime('%Y%m%d')
+                    gmatch[u'COMMON'][u'README'].group(0)) )
+                self._data[u'info'][u'date'] = unicode(
+-                   readme[u'date'].strftime('%Y%m%d') )
             else:
-                self._data['info']['date'] = int(genome_match.group(3))
+                self._data[u'info'][u'date'] = unicode(
+-                   int(genome_match.group(3)) )
         
         # Set genome name from strain and ID.
-        self._data['info']['name'] = 'SGD_{}_{}'.format(
-            self._data['info']['strain'], self._data['info']['ID'])
+        self._data[u'info'][u'name'] = u'SGD_{}_{}'.format(
+            self._data[u'info'][u'strain'], self._data[u'info'][u'ID'])
         
         # Update file info.
         for k in gmatch.keys():
             for t in gmatch[k].keys():
-                self._data['files'][t] = gmatch[k][t].group(0)
+                self._data[u'files'][t] = gmatch[k][t].group(0)
 
 ################################################################################
 
 def _norm_chr(chromosome):
-    """Normalise chromosome name.
+    u"""Normalise chromosome name.
     
     Args:
-        chromosome (str): Chromosome name.
+        chromosome: Chromosome name.
     
     Returns:
-        str: Normalised chromosome name. Returns None on failure.
+        unicode: Normalised chromosome name. Returns None on failure.
     """
     
     # This pattern is modelled on the method used by SnpEff to simplify 
@@ -361,7 +378,7 @@ def _norm_chr(chromosome):
     # the form 'chr', 'chromo', and 'chromosome' are removed, as well as leading
     # zeroes in the chromosome number and known delimiters (i.e. ':', '_', '-').
     # (See https://github.com/pcingola/SnpEff [Accessed: 16 Feb 2016].)
-    chromosome_pattern = re.compile('^(?:chr(?:omo(?:some)?)?)?0*(\S+)$')
+    chromosome_pattern = re.compile(u'^(?:chr(?:omo(?:some)?)?)?0*(\S+)$')
 
     # Init normalised chromosome to None.
     result = None
@@ -369,20 +386,25 @@ def _norm_chr(chromosome):
     # If putative chromosome is defined, try to normalise.
     if chromosome is not None:
         
-        # If putative chromosome is an integer, convert to string..
+        # If putative chromosome is an integer, convert to unicode..
         if isinstance(chromosome, (int, long)):
         
-            chromosome = str(chromosome)
+            chromosome = unicode(chromosome)
+        
+        # ..otherwise if of type str, convert to unicode..
+        elif isinstance(chromosome, str):
             
-        # ..otherwise check of string type.
-        elif isinstance(chromosome, basestring):
+            chromosome = chromosome.decode('utf_8').strip()
+            
+        # ..otherwise check of unicode type.
+        elif isinstance(chromosome, unicode):
             chromosome = chromosome.strip()
         else:
             raise TypeError("chromosome is not a string or integer")
         
         # If putative chromosome is in the set of 
         # normalised chromosomes, set as normalised..
-        if chromosome in _info['norm_chr']:
+        if chromosome in _info[u'norm_chr']:
             result = chromosome
         
         # ..otherwise try to map to a normalised chromosome.
@@ -391,38 +413,38 @@ def _norm_chr(chromosome):
             
             try:
                 k = m.group(1).upper()
-                result = _info['chr2norm'][k]
+                result = _info[u'chr2norm'][k]
             except (AttributeError, KeyError):
                 pass
                 
     return result
 
 def _load_genome_readme(filepath):
-    """Load SGD genome README file."""
+    u"""Load SGD genome README file."""
     
-    with open(filepath, 'r') as fh:
+    with TextReader(filepath) as fh:
         
         lines = [ line.rstrip() for line in fh.readlines() ]
         
         try:
-            assert all( lines[i] == '' for i in (1, 3) )
+            assert all( lines[i] == u'' for i in (1, 3) )
             
             heading = lines[0]
             date = datetime.strptime(lines[2], '%m/%d/%Y').date()
             body = deque( lines[4:] )
             
             # Strip blank lines from beginning and end of README body.
-            while len(body) > 0 and body[0].strip() == '':
+            while len(body) > 0 and body[0].strip() == u'':
                 body.popleft()
-            while len(body) > 0 and body[-1].strip() == '':
+            while len(body) > 0 and body[-1].strip() == u'':
                 body.pop()
             
-            body = '\n'.join(body)
+            body = u'\n'.join(body)
             
             result = OrderedDict([
-                ('heading', heading), 
-                ('date', date), 
-                ('body', body)
+                (u'heading', heading),
+                (u'date', date),
+                (u'body', body)
             ])
             
         except (AssertionError, IndexError):
@@ -434,21 +456,21 @@ def _load_genome_readme(filepath):
 
 @gactfunc
 def index_genome(directory):
-    """Index yeast genome data.
+    u"""Index yeast genome data.
     
     This takes as input a directory containing genome assembly files downloaded 
     from the Saccharomyces Genome Database (SGD). It indexes the data files in 
     the input directory and saves these to a genome index file in YAML format.
     
     Args:
-        directory (str): Path to yeast genome data directory.
+        directory (unicode): Path to yeast genome data directory.
     """
     gindex = GenomeIndex(directory)
     gindex.dump(directory)
 
 @gactfunc
 def prep_genome(directory, email=None):
-    """Prep yeast genome data.
+    u"""Prep yeast genome data.
     
     This takes as input a directory containing genome assembly files downloaded 
     from the Saccharomyces Genome Database (SGD). It processes the SGD data 
@@ -481,8 +503,8 @@ def prep_genome(directory, email=None):
     be converted to GFF3 format before input to this script.
     
     Args:
-        directory (str): Path to yeast genome data directory.
-        email (str): Contact email for NCBI E-utilities.
+        directory (unicode): Path to yeast genome data directory.
+        email (unicode): Contact email for NCBI E-utilities.
     """
     
     # PROCESS ... ##############################################################
@@ -490,25 +512,25 @@ def prep_genome(directory, email=None):
     gindex = GenomeIndex(directory)
     
     # Check annotation file found.
-    if 'annotation' not in gindex.files:
+    if u'annotation' not in gindex.files:
         raise RuntimeError("cannot prep genome - annotation file not found")
     
     # Set output genome sequence file path.
-    sequence_file = os.path.join(directory, '{}.fa'.format(gindex.info['name']))
+    sequence_file = os.path.join(directory, u'{}.fa'.format(gindex.info[u'name']))
     
     # Set output genome annotation file path.
-    annotation_file = os.path.join(directory, '{}.gff'.format(gindex.info['name']))
+    annotation_file = os.path.join(directory, u'{}.gff'.format(gindex.info[u'name']))
     
     # Set sequence definition pattern.
-    seq_def_pattern = re.compile("^Saccharomyces cerevisiae(?: strain)? (\S+)"
-        "(?: chromosome (\S+?),?)? (\S+)(?: genomic scaffold)?, whole genome "
-        "(?:shotgun)? sequence$", re.IGNORECASE)
+    seq_def_pattern = re.compile(u"^Saccharomyces cerevisiae(?: strain)? (\S+)"
+        u"(?: chromosome (\S+?),?)? (\S+)(?: genomic scaffold)?, whole genome "
+        u"(?:shotgun)? sequence$", re.IGNORECASE)
     
     # Set GFF pragma patterns.
     pragma_pattern = {
-        'version': re.compile('^##gff-version (.+)$'),
-        'forward-reference-resolution': re.compile('^###$'),
-        'fasta': re.compile('^##FASTA$')
+        u'version': re.compile(u'^##gff-version (.+)$'),
+        u'forward-reference-resolution': re.compile(u'^###$'),
+        u'fasta': re.compile(u'^##FASTA$')
     }
     
     # Set GenBank query frequency: at least one second between queries.
@@ -519,7 +541,7 @@ def prep_genome(directory, email=None):
     
     # READ GFF FILE ############################################################
     
-    anno_path = os.path.join(directory, gindex.files['annotation'])
+    anno_path = os.path.join(directory, gindex.files[u'annotation'])
     
     # Read GFF pragmas and comments.
     with TextReader(anno_path) as fh:
@@ -527,12 +549,13 @@ def prep_genome(directory, email=None):
         pragmas, comments = [ list() for _ in range(2) ]
         
         # Read all GFF comment lines.
-        comment_lines = [ line.rstrip() for line in fh.readlines() 
-            if line.startswith('#') ]
+        comment_lines = [ line.rstrip()
+            for line in fh.readlines()
+            if line.startswith(u'#') ]
             
         # Separate pragmas and comments.
         for line in comment_lines:
-            if line.startswith('##'):
+            if line.startswith(u'##'):
                 pragmas.append(line)
             else: 
                 comments.append(line)
@@ -547,7 +570,7 @@ def prep_genome(directory, email=None):
                 raise ValueError("unknown pragma ~ {!r}".format(pragma))
         
         # Set GFF header comments.
-        header_comments = '\n'.join(comments)
+        header_comments = u'\n'.join(comments)
     
     # Read and modify GFF records.
     with TextReader(anno_path) as fh:
@@ -564,7 +587,7 @@ def prep_genome(directory, email=None):
             
             # Check if sequence name matches expected pattern  
             # for a sequence header containing a GI number.
-            gi_match = _info['pattern']['gi'].match(record.id)
+            gi_match = _info[u'pattern'][u'gi'].match(record.id)
                     
             # If sequence header appears to contain GI number, 
             # query GenBank for relevant sequence information..
@@ -572,21 +595,21 @@ def prep_genome(directory, email=None):
                 
                 # Get GI number from sequence header.
                 gi = gi_match.group(1)
-            
+                
                 # Polite delay until GenBank timer expires.
                 if time.time() < genbank_timer:
                     polite_delay = genbank_timer - time.time()
                     time.sleep( polite_delay )
                 
                 # Fetch GenBank entry for GI number.
-                result = check_efetch(db='nucleotide', id=gi, retmode='xml', 
+                result = check_efetch(db=u'nucleotide', id=gi, retmode=u'xml',
                     email=email)
                 
                 # Reset GenBank timer.
                 genbank_timer = time.time() + genbank_frequency
                 
                 # Get sequence definition.
-                seq_def = result[0]['GBSeq_definition']
+                seq_def = result[0][u'GBSeq_definition'].decode('utf_8')
             
                 # Check if sequence definition matches expected pattern.
                 seq_def_match = seq_def_pattern.match(seq_def)
@@ -602,7 +625,7 @@ def prep_genome(directory, email=None):
                 seq_chr = _norm_chr(seq_chr)
                 
                 # Incorporate chromosome in sequence name.
-                seq_id = '{}_{}'.format(seq_chr, seq_id)
+                seq_id = u'{}_{}'.format(seq_chr, seq_id)
                 
             # ..otherwise check if sequence is itself a chromosome.
             else:
@@ -630,7 +653,7 @@ def prep_genome(directory, email=None):
             # If sequence is described in a feature record, 
             # update ID attribute to reflect new sequence ID.
             for j, feature in enumerate(record.features):
-                if feature.type in ('chromosome', 'contig'):
+                if feature.type in (u'chromosome', u'contig'):
                     feature.id = seq_id
                     record.features[j] = feature
             
@@ -640,40 +663,44 @@ def prep_genome(directory, email=None):
     
     # Get timepoint and timestamp.
     dt = datetime.now()
-    timepoint = dt.strftime('%H:%M:%S on %A %d %B %Y')
-    timestamp = dt.strftime('%a %b %d %H:%M:%S %Y')
+    timepoint = unicode( dt.strftime('%H:%M:%S on %A %d %B %Y') )
+    # timestamp = dt.strftime('%a %b %d %H:%M:%S %Y')
     
     # Set general GFF header appendix.
-    template = Template( _info['header_appendix'] )
-    additional_comments = template.substitute({ 'TIMEPOINT': timepoint, 
-        'SCRIPT': 'GACTutil', 'CONTACT': email })
-    header_comments = '\n'.join([header_comments, additional_comments])
+    template = Template( _info[u'header_appendix'] )
+    additional_comments = template.substitute({
+        u'TIMEPOINT': timepoint,
+        u'SCRIPT': 'GACTutil',
+        u'CONTACT': email
+    })
+    header_comments = u'\n'.join([header_comments,
+        additional_comments])
     
     # Get serialised annotation data.
     with temporary_directory() as twd:
         
-        annotation_temp = os.path.join(twd, 'annotation.tmp')
+        annotation_temp = os.path.join(twd, u'annotation.tmp')
         
-        with open(annotation_temp, 'w') as fh:
+        with TextWriter(annotation_temp) as fh:
             GFF.write(records, fh)
             
-        with open(annotation_temp, 'r') as fh:
+        with TextReader(annotation_temp) as fh:
             lines = fh.readlines()
             version_pragma = lines[0]
-            annotation_data = ''.join(lines[1:])
+            annotation_data = u''.join(lines[1:])
     
     # Check that BCBio GFF output starts with a version pragma.
-    if pragma_pattern['version'].match(version_pragma) is None:
+    if pragma_pattern[u'version'].match(version_pragma) is None:
         raise RuntimeError("version pragma not found in BCBio GFF output")
     
     # Write output annotation file.
-    with open(annotation_file, 'w') as fh:
+    with TextWriter(annotation_file) as fh:
         fh.write(version_pragma)
         fh.write(header_comments)
         fh.write(annotation_data)
     
     # Write output sequence file.
-    with open(sequence_file, 'w') as fh:
+    with TextWriter(sequence_file) as fh:
         for record in records:
             SeqIO.write(record, fh, 'fasta')
     

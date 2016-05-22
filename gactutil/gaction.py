@@ -1,15 +1,19 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-"""GACTutil command-line interface."""
+u"""GACTutil command-line interface."""
 
+from __future__ import absolute_import
 from argparse import ArgumentParser
 from collections import deque
+from collections import Mapping
+from collections import Iterable
 from collections import MutableMapping
 from collections import namedtuple
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import date
 from datetime import datetime
+from functools import partial
 from imp import load_source
 from importlib import import_module
 from inspect import getargspec
@@ -28,37 +32,41 @@ import sys
 from textwrap import dedent
 from types import IntType
 from types import NoneType
-import yaml
-from yaml import YAMLError
 
 from gactutil import _read_about
 from gactutil import _tokenise_source
-from gactutil import SafeLoader # unicode-only YAML loader
+from gactutil import fsdecode
+from gactutil import fsencode
 from gactutil import TextReader
 from gactutil import TextWriter
+from gactutil import uniload_scalar
+from gactutil import unidump_scalar
+from gactutil import unidump
+from gactutil import uniload
+from gactutil import YAMLError
 
 ################################################################################
 
 class _GactfuncSpec(object):
-    """Class for specification of gactfunc info."""
+    u"""Class for specification of gactfunc info."""
     
     @property
     def module(self):
-        return self._data['module']
+        return self._data[u'module']
     
     @property
     def function(self):
-        return self._data['function']
+        return self._data[u'function']
     
     @property
     def ap_spec(self):
-        return self._data['ap_spec']
+        return self._data[u'ap_spec']
     
     def __init__(self, module, function, ap_spec):
         self._data = OrderedDict([
-            ('module', module),
-            ('function', function),
-            ('ap_spec', ap_spec)
+            (u'module', module),
+            (u'function', function),
+            (u'ap_spec', ap_spec)
         ])
     
     def __setattr__(self, key, value):
@@ -69,106 +77,103 @@ class _GactfuncSpec(object):
 
 # Named tuple for specification of gactfunc parameter/return types.
 _GFTS = namedtuple('GFTS', [
-    'name',           # Name of gactfunc data type.
     'is_compound',    # Composite data type.
-    'is_delimitable', # Convertible to a delimited string, and vice versa.
     'is_ductile',     # Convertible to a single-line string, and vice versa.
-    'is_fileable',    # Can be loaded from and dumped to file.
-    'match'           # Function to match object to the given type spec.
+    'is_fileable'     # Can be loaded from and dumped to file.
 ])
 
 _info = {
 
     # True values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
-    'true_values': ('yes', 'Yes', 'YES', 'true', 'True', 'TRUE', 'on', 'On', 'ON'),
+    u'true_values': (u'yes', u'Yes', u'YES', u'true', u'True', u'TRUE', u'on', u'On', u'ON'),
     
     # False values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
-    'false_values': ('no', 'No', 'NO', 'false', 'False', 'FALSE', 'off', 'Off', 'OFF'),
+    u'false_values': (u'no', u'No', u'NO', u'false', u'False', u'FALSE', u'off', u'Off', u'OFF'),
     
     # Null values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
-    'na_values': ('null', 'Null', 'NULL'),
+    u'na_values': (u'null', u'Null', u'NULL'),
     
-    'reserved_params': frozenset([
-        'help',              # argparse help
-        'version',           # argparse version
-        'gactfunc_function', # gactfunc function name
-        'gactfunc_module',   # gactfunc module name
-        'retfile'            # return-value option name
+    u'reserved_params': frozenset([
+        u'help',              # argparse help
+        u'version',           # argparse version
+        u'gactfunc_function', # gactfunc function name
+        u'gactfunc_module',   # gactfunc module name
+        u'retfile'            # return-value option name
     ]),
     
     # Input/output patterns.
-    'iop': {
+    u'iop': {
         
         # Input parameter patterns.
-        'input': {
+        u'input': {
             
-            'single': {
-                'regex': re.compile('^infile$'),
-                'metavar': 'FILE',
-                'flag': '-i'
+            u'single': {
+                u'regex': re.compile(u'^infile$'),
+                u'metavar': u'FILE',
+                u'flag': u'-i'
             },
             
-            'listed': {
-                'regex': re.compile('^infiles$'),
-                'metavar': 'FILES',
-                'flag': '-i'
+            u'listed': {
+                u'regex': re.compile(u'^infiles$'),
+                u'metavar': u'FILES',
+                u'flag': u'-i'
             },
             
-            'indexed': {
-                'regex': re.compile('^infile(?P<index>[1-9]+|U)$'),
-                'metavar': 'FILE\g<index>',
-                'flag': '-\g<index>'
+            u'indexed': {
+                u'regex': re.compile(u'^infile(?P<index>[1-9]+|U)$'),
+                u'metavar': u'FILE\g<index>',
+                u'flag': u'-\g<index>'
             },
             
-            'directory': {
-                'regex': re.compile('^indir$'),
-                'metavar': 'DIR',
-                'flag': '-i'
+            u'directory': {
+                u'regex': re.compile(u'^indir$'),
+                u'metavar': u'DIR',
+                u'flag': u'-i'
             },
             
-            'prefix': {
-                'regex': re.compile('^inprefix$'),
-                'metavar': 'PREFIX',
-                'flag': '-i'
+            u'prefix': {
+                u'regex': re.compile(u'^inprefix$'),
+                u'metavar': u'PREFIX',
+                u'flag': u'-i'
             }
         },
         
         # Output parameter patterns.
-        'output': {
-            'single': {
-                'regex': re.compile('^outfile$'),
-                'metavar': 'FILE',
-                'flag': '-o'
+        u'output': {
+            u'single': {
+                u'regex': re.compile(u'^outfile$'),
+                u'metavar': u'FILE',
+                u'flag': u'-o'
             },
             
-            'listed': {
-                'regex': re.compile('^outfiles$'),
-                'metavar': 'FILES',
-                'flag': '-o'
+            u'listed': {
+                u'regex': re.compile(u'^outfiles$'),
+                u'metavar': u'FILES',
+                u'flag': u'-o'
             },
             
-            'indexed': {
-                'regex': re.compile('^outfile(?P<index>[1-9]+|U)$'),
-                'metavar': 'FILE\g<index>',
-                'flag': '--\g<index>'
+            u'indexed': {
+                u'regex': re.compile(u'^outfile(?P<index>[1-9]+|U)$'),
+                u'metavar': u'FILE\g<index>',
+                u'flag': u'--\g<index>'
             },
             
-            'directory': {
-                'regex': re.compile('^outdir$'),
-                'metavar': 'DIR',
-                'flag': '-o'
+            u'directory': {
+                u'regex': re.compile(u'^outdir$'),
+                u'metavar': u'DIR',
+                u'flag': u'-o'
             },
             
-            'prefix': {
-                'regex': re.compile('^outprefix$'),
-                'metavar': 'PREFIX',
-                'flag': '-o'
+            u'prefix': {
+                u'regex': re.compile(u'^outprefix$'),
+                u'metavar': u'PREFIX',
+                u'flag': u'-o'
             },
             
-            'returned': {
-                'regex': None,
-                'metavar': 'FILE',
-                'flag': '-o'
+            u'returned': {
+                u'regex': None,
+                u'metavar': u'FILE',
+                u'flag': u'-o'
             }
         }
     },
@@ -178,47 +183,264 @@ _info = {
     # parameters to take a short form on the command line. If a gactfunc
     # uses a short-form parameter, this is automatically converted to
     # the corresponding flag by '_setup_commands'.
-    'short_params': {
+    u'short_params': {
         
-        'directory': {
-            'flag': '-d',
-            'type': 'str'
+        u'directory': {
+            u'flag': u'-d',
+            u'type': unicode
         },
         
-        'threads': {
-            'default': 1,
-            'flag': '-t',
-            'required': False,
-            'type': 'int'
+        u'threads': {
+            u'default': 1,
+            u'flag': u'-t',
+            u'required': False,
+            u'type': int
         }
     },
     
     # Gactfunc docstring headers.
-    'docstring_headers': {
+    u'docstring_headers': {
         
-        'known': ('Args', 'Arguments', 'Attributes', 'Example', 'Examples',
-                  'Keyword Args', 'Keyword Arguments', 'Methods', 'Note',
-                  'Notes', 'Other Parameters', 'Parameters', 'Return',
-                  'Returns', 'Raises', 'References', 'See Also', 'Warning',
-                  'Warnings', 'Warns', 'Yield', 'Yields'),
+        u'known': (u'Args', u'Arguments', u'Attributes', u'Example', u'Examples',
+                  u'Keyword Args', u'Keyword Arguments', u'Methods', u'Note',
+                  u'Notes', u'Other Parameters', u'Parameters', u'Return',
+                  u'Returns', u'Raises', u'References', u'See Also', u'Warning',
+                  u'Warnings', u'Warns', u'Yield', u'Yields'),
         
-        'supported': ('Args', 'Arguments', 'Note', 'Notes', 'Parameters',
-                      'Return', 'Returns', 'References', 'See Also'),
+        u'supported': (u'Args', u'Arguments', u'Note', u'Notes', u'Parameters',
+                      u'Return', u'Returns', u'References', u'See Also'),
         
-        'alias_mapping': { 'Arguments': 'Args', 'Parameters': 'Args',
-                           'Return': 'Returns' }
+        u'alias_mapping': { u'Arguments': u'Args', u'Parameters': u'Args',
+                           u'Return': u'Returns' }
     },
     
-    'regex': {
-        'gactfunc': re.compile('^(?:[A-Z0-9]+)(?:_(?:[A-Z0-9]+))*$', re.IGNORECASE),
-        'docstring_header': re.compile('^(\w+):\s*$'),
-        'docstring_param': re.compile('^([*]{0,2}\w+)\s*(?:\((\w+)\))?:\s+(.+)$'),
-        'docstring_return': re.compile('^(?:(\w+):\s+)?(.+)$'),
-        'docstring_default': re.compile('[[(]default:\s+(.+?)\s*[])]', re.IGNORECASE)
+    u'regex': {
+        u'gactfunc': re.compile(u'^(?:[A-Z0-9]+)(?:_(?:[A-Z0-9]+))*$', re.IGNORECASE),
+        u'docstring_header': re.compile(u'^(\w+):\s*$'),
+        u'docstring_param': re.compile(u'^([*]{0,2}\w+)\s*(?:\((\w+)\))?:\s+(.+)$'),
+        u'docstring_return': re.compile(u'^(?:(\w+):\s+)?(.+)$'),
+        u'docstring_default': re.compile(u'[[(]default:\s+(.+?)\s*[])]', re.IGNORECASE)
     }
 }
 
 ################################################################################
+
+def _DataFrame_from_file(f):
+    u"""Get Pandas DataFrame from file."""
+    
+    try:
+        with TextReader(f) as reader:
+            x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False,
+                skipinitialspace=True, true_values=_info[u'true_values'],
+                false_values=_info[u'false_values'], keep_default_na=False,
+                na_values=_info[u'na_values'])
+    except (IOError, OSError):
+        raise RuntimeError("failed to get DataFrame from file ~ {!r}".format(f))
+    
+    return x
+
+def _DataFrame_to_file(x, f):
+    u"""Output Pandas DataFrame to file."""
+    try:
+        with TextWriter(f) as writer:
+            x.to_csv(writer, sep=',', na_rep=_info[u'na_values'][0], index=False)
+    except (IOError, OSError):
+        raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
+
+def _dict_from_file(f):
+    u"""Get dictionary from file."""
+    
+    try:
+        with TextReader(f) as reader:
+            x = uniload(reader)
+        assert type(x) == dict
+    except (AssertionError, IOError, YAMLError):
+        raise ValueError("failed to read valid dict from file ~ {!r}".format(f))
+    
+    return x
+
+def _dict_from_line(s):
+    u"""Get dictionary from input string."""
+    
+    s = fsdecode(s)
+    
+    if not ( s.startswith(u'{') and s.endswith(u'}') ):
+        s = u'{' + s + u'}'
+    
+    try:
+        x = uniload(s)
+        assert type(x) == dict
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to convert string to valid dict ~ {!r}".format(s))
+    
+    return x
+
+def _dict_to_file(x, f):
+    u"""Output dictionary to file."""
+    
+    if type(x) != dict:
+        raise TypeError("argument must be of type dict, not {!r}".format(
+            type(x).__name__))
+    
+    try:
+        with TextWriter(f) as writer:
+            unidump(x, writer, default_flow_style=False, width=sys.maxint)
+    except (IOError, YAMLError):
+        raise ValueError("failed to output dict to file ~ {!r}".format(x))
+
+def _dict_to_line(x):
+    u"""Convert dictionary to a single-line unicode string."""
+    
+    if type(x) != dict:
+        raise TypeError("argument must be of type dict, not {!r}".format(
+            type(x).__name__))
+    
+    try:
+        s = unidump(x, default_flow_style=True, width=sys.maxint)
+        s = s.rstrip(u'\n')
+        assert u'\n' not in s
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to convert dict to unicode ~ {!r}".format(x))
+    
+    return s
+
+def _list_from_file(f):
+    u"""Get list from file."""
+    
+    with TextReader(f) as reader:
+        
+        document_ended = False
+        last_nonempty_line = 0
+        x = list()
+        
+        # Enumerate lines of file with 1-offset index.
+        for i, line in enumerate(reader, start=1):
+            
+            # Strip YAML comments and flanking whitespace from this line.
+            line = ystrip(line)
+            
+            # Skip lines after explicit document end.
+            if document_ended:
+                if line != u'':
+                    raise RuntimeError("list elements found after document end")
+                continue
+            
+            # If line is not empty, update 1-offset index of last nonempty line.
+            if line != u'':
+                last_nonempty_line = i
+            
+            # Check for explicit document separator.
+            if line == u'---':
+                raise RuntimeError("expected a single document in list stream")
+            
+            # Check for explicit document end.
+            if line == u'...':
+                document_ended = True
+                continue
+            
+            # Load element from line.
+            if line.startswith(u'{') and line.endswith(u'}'):
+                element = _dict_from_line(line)
+            elif line.startswith(u'[') and line.endswith(u']'):
+                element = _list_from_line(line)
+            else:
+                element = _scalar_from_line(line)
+            
+            # Append element to list.
+            x.append(element)
+        
+        # Pop trailing empty lines.
+        while len(x) > last_nonempty_line:
+            x.pop()
+    
+    return x
+
+def _list_from_line(s):
+    u"""Get list from string."""
+    
+    s = fsdecode(s)
+    
+    if not ( s.startswith(u'[') and s.endswith(u']') ):
+        s = u'[' + s + u']'
+    
+    try:
+        x = uniload(s)
+        assert type(x) == list
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to convert string to valid list ~ {!r}".format(s))
+    
+    return x
+
+def _list_to_file(x, f):
+    u"""Output list to file."""
+    
+    if type(x) != list:
+        raise TypeError("argument must be of type list, not {!r}".format(
+            type(x).__name__))
+    
+    with TextWriter(f) as writer:
+        
+        for element in x:
+            
+            try:
+                # Convert element to a single-line.
+                if isinstance(element, dict):
+                    line = _dict_to_line(element)
+                elif isinstance(element, list):
+                    line = _list_to_line(element)
+                else:
+                    line = _scalar_to_line(element)
+                
+                # Write line to output file.
+                writer.write( u'{}{}'.format(line.rstrip(u'\n'), u'\n') )
+                
+            except (IOError, ValueError):
+                raise ValueError("failed to output list to file ~ {!r}".format(x))
+
+def _list_to_line(x):
+    u"""Convert list to a single-line unicode string."""
+    
+    if type(x) != list:
+        raise TypeError("argument must be of type list, not {!r}".format(
+            type(x).__name__))
+    
+    try:
+        s = unidump(x, default_flow_style=True, width=sys.maxint)
+        s = s.rstrip(u'\n')
+        assert u'\n' not in s
+    except (AssertionError, YAMLError):
+        raise ValueError("failed to convert list to unicode ~ {!r}".format(x))
+    
+    return s
+
+def _scalar_from_file(f, scalar_type=None):
+    u"""Get scalar from file."""
+    with TextReader(f) as fh:
+        s = fh.read()
+    return _scalar_from_line(s, scalar_type=scalar_type)
+
+def _scalar_from_line(s, scalar_type=None):
+    u"""Get scalar from string."""
+    
+    s = fsdecode(s)
+    
+    x = uniload_scalar(s)
+    
+    if scalar_type is not None and type(x) != scalar_type:
+        raise ValueError("failed to convert string to valid {} ~ {!r}".format(
+            scalar_type.__name__, s))
+    
+    return x
+
+def _scalar_to_file(x, f):
+    u"""Output scalar to file."""
+    s = _scalar_to_line(x)
+    with TextWriter(f) as fh:
+        fh.write(u'{}\n'.format(s))
+
+def _scalar_to_line(x):
+    u"""Convert scalar to a single-line unicode string."""
+    return unidump_scalar(x)
 
 class _Chaperon(object):
     
@@ -227,624 +449,206 @@ class _Chaperon(object):
     # loaded from a file or converted from a simple string. NB: types should be
     # checked in order (e.g. bool before int, datetime before date).
     supported_types = OrderedDict([
-        #                          NAME  COMPOUND  DELIMIT   DUCTILE  FILEABLE
-        ('NoneType',  _GFTS( 'NoneType',    False,    True,     True,     True,
-            lambda x: isinstance(x, NoneType))),
-        ('bool',      _GFTS(     'bool',    False,    True,     True,     True,
-            lambda x: isinstance(x, bool))),
-        ('str',       _GFTS(      'str',    False,    True,     True,     True,
-            lambda x: isinstance(x, basestring))),
-        ('float',     _GFTS(    'float',    False,    True,     True,     True,
-            lambda x: isinstance(x, float))),
-        ('int',       _GFTS(      'int',    False,    True,     True,     True,
-            lambda x: isinstance(x, IntType))),
-        ('datetime',  _GFTS( 'datetime',    False,    True,     True,     True,
-            lambda x: isinstance(x, datetime))),
-        ('date',      _GFTS( '    date',    False,    True,     True,     True,
-            lambda x: isinstance(x, date))),
-        ('dict',      _GFTS(     'dict',     True,    True,     True,     True,
-            lambda x: isinstance(x, dict))),
-        ('list',      _GFTS(     'list',     True,    True,     True,     True,
-            lambda x: isinstance(x, list))),
-        ('DataFrame', _GFTS('DataFrame',     True,   False,    False,     True,
-            lambda x: isinstance(x, DataFrame)))
+        #                 COMPOUND   DUCTILE  FILEABLE
+        (NoneType,  _GFTS(   False,     True,     True)),
+        (bool,      _GFTS(   False,     True,     True)),
+        (unicode,   _GFTS(   False,     True,     True)),
+        (float,     _GFTS(   False,     True,     True)),
+        (int,       _GFTS(   False,     True,     True)),
+        (datetime,  _GFTS(   False,     True,     True)),
+        (date,      _GFTS(   False,     True,     True)),
+        (dict,      _GFTS(    True,     True,     True)),
+        (list,      _GFTS(    True,     True,     True)),
+        (DataFrame, _GFTS(    True,    False,     True))
+    ])
+    
+    # Mapping of each supported type name to its corresponding type object.
+    _name2type = OrderedDict([
+        (u'NoneType',  NoneType),
+        (u'bool',      bool),
+        (u'unicode',   unicode),
+        (u'float',     float),
+        (u'int',       int),
+        (u'datetime',  datetime),
+        (u'date',      date),
+        (u'dict',      dict),
+        (u'list',      list),
+        (u'DataFrame', DataFrame)
+    ])
+    
+    # Mapping of each supported type to its corresponding file-loading function.
+    _from_file = OrderedDict([
+        (NoneType,  partial(_scalar_from_file, scalar_type=NoneType)),
+        (bool,      partial(_scalar_from_file, scalar_type=bool)),
+        (unicode,   partial(_scalar_from_file, scalar_type=unicode)),
+        (float,     partial(_scalar_from_file, scalar_type=float)),
+        (int,       partial(_scalar_from_file, scalar_type=int)),
+        (datetime,  partial(_scalar_from_file, scalar_type=datetime)),
+        (date,      partial(_scalar_from_file, scalar_type=date)),
+        (dict,      _dict_from_file),
+        (list,      _list_from_file),
+        (DataFrame, _DataFrame_from_file)
+    ])
+    
+    # Mapping of each supported type to its corresponding line-loading function.
+    _from_line = OrderedDict([
+        (NoneType,  partial(_scalar_from_line, scalar_type=NoneType)),
+        (bool,      partial(_scalar_from_line, scalar_type=bool)),
+        (unicode,   partial(_scalar_from_line, scalar_type=unicode)),
+        (float,     partial(_scalar_from_line, scalar_type=float)),
+        (int,       partial(_scalar_from_line, scalar_type=int)),
+        (datetime,  partial(_scalar_from_line, scalar_type=datetime)),
+        (date,      partial(_scalar_from_line, scalar_type=date)),
+        (dict,      _dict_from_line),
+        (list,      _list_from_line)
+    ])
+    
+    # Mapping of each supported type to its corresponding file-dumping function.
+    _to_file = OrderedDict([
+        (NoneType,  _scalar_to_file),
+        (bool,      _scalar_to_file),
+        (unicode,   _scalar_to_file),
+        (float,     _scalar_to_file),
+        (int,       _scalar_to_file),
+        (datetime,  _scalar_to_file),
+        (date,      _scalar_to_file),
+        (dict,      _dict_to_file),
+        (list,      _list_to_file),
+        (DataFrame, _DataFrame_to_file)
+    ])
+    
+    # Mapping of each supported type to its corresponding line-dumping function.
+    _to_line = OrderedDict([
+        (NoneType,  _scalar_to_line),
+        (bool,      _scalar_to_line),
+        (unicode,   _scalar_to_line),
+        (float,     _scalar_to_line),
+        (int,       _scalar_to_line),
+        (datetime,  _scalar_to_line),
+        (date,      _scalar_to_line),
+        (dict,      _dict_to_line),
+        (list,      _list_to_line)
     ])
     
     @staticmethod
-    def _bool_from_file(f):
-        """Get bool from file."""
-        with TextReader(f) as fh:
-            s = fh.read().strip()
-        return _Chaperon._bool_from_string(s)
-    
-    @staticmethod
-    def _bool_from_string(s):
-        """Get bool from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['bool'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to parse Boolean string ~ {!r}".format(s))
-        return x
-    
-    @staticmethod
-    def _bool_to_file(x, f):
-        """Output bool to file."""
-        s = _Chaperon._bool_to_string(x)
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _bool_to_string(x):
-        """Convert bool to string."""
-        return 'true' if x else 'false'
-    
-    @staticmethod
-    def _DataFrame_from_file(f):
-        """Get Pandas DataFrame from file."""
-        
-        try:
-            with TextReader(f) as reader:
-                x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False,
-                    skipinitialspace=True, true_values=_info['true_values'],
-                    false_values=_info['false_values'], keep_default_na=False,
-                    na_values=_info['na_values'])
-        except (IOError, OSError):
-            raise RuntimeError("failed to get DataFrame from file ~ {!r}".format(f))
-        
-        return x
-    
-    @staticmethod
-    def _DataFrame_from_string(s):
-        """Get Pandas DataFrame from input str/unicode."""
-        
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of string type ~ {!r}".format(s))
-        
-        try:
-            with BytesIO(s) as fh:
-                x = read_csv(fh, sep=',', header=0, mangle_dupe_cols=False,
-                    skipinitialspace=True, true_values=_info['true_values'],
-                    false_values=_info['false_values'], keep_default_na=False,
-                    na_values=_info['na_values'])
-        except (IOError, OSError):
-            raise RuntimeError("failed to get DataFrame from string ~ {!r}".format(f))
-        
-        return x
-    
-    @staticmethod
-    def _DataFrame_to_file(x, f):
-        """Output Pandas DataFrame to file."""
-        try:
-            with TextWriter(f) as writer:
-                x.to_csv(writer, sep=',', na_rep=_info['na_values'][0], index=False)
-        except (IOError, OSError):
-            raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
-
-    @staticmethod
-    def _DataFrame_to_string(x):
-        """Convert Pandas DataFrame to string."""
-        try:
-            with BytesIO() as fh:
-                x.to_csv(fh, sep=',', na_rep=_info['na_values'][0], index=False)
-                s = fh.getvalue()
-        except (IOError, OSError):
-            raise ValueError("failed to output DataFrame to string ~ {!r}".format(x))
-        
-        return s
-    
-    @staticmethod
-    def _date_from_file(f):
-        """Get date from file."""
-        with TextReader(f) as fh:
-            s = fh.read().strip()
-        return _Chaperon._date_from_string(s)
-    
-    @staticmethod
-    def _date_from_string(s):
-        """Get date from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['date'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to parse date string ~ {!r}".format(s))
-        return x
-    
-    @staticmethod
-    def _date_to_file(x, f):
-        """Output date to file."""
-        s = _Chaperon._date_to_string(x)
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _date_to_string(x):
-        """Convert date to string."""
-        return x.strftime('%Y-%m-%d')
-    
-    @staticmethod
-    def _datetime_from_file(f):
-        """Get datetime from file."""
-        with TextReader(f) as fh:
-            s = fh.read().strip()
-        return _Chaperon._datetime_from_string(s)
-    
-    @staticmethod
-    def _datetime_from_string(s):
-        """Get datetime from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['datetime'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to parse datetime string ~ {!r}".format(s))
-        return x
-    
-    @staticmethod
-    def _datetime_to_file(x, f):
-        """Output datetime to file."""
-        s = _Chaperon._datetime_to_string(x)
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _datetime_to_string(x):
-        """Convert date to string."""
-        return x.strftime('%Y-%m-%d %H:%M:%S')
-    
-    @staticmethod
-    def _dict_from_file(f):
-        """Get dictionary from file."""
-        
-        try:
-            with TextReader(f) as reader:
-                x = yaml.safe_load(reader)
-            assert isinstance(x, dict)
-        except (AssertionError, IOError, YAMLError):
-            raise ValueError("failed to load dictionary from file ~ {!r}".format(f))
-        
-        return x
-    
-    @staticmethod
-    def _dict_from_string(s):
-        """Get dictionary from input str/unicode."""
-        
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of string type ~ {!r}".format(s))
-        
-        if not ( s.startswith('{') and s.endswith('}') ):
-            s = '{' + s + '}'
-        
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['dict'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to parse dict from string ~ {!r}".format(s))
-        
-        return x
-    
-    @staticmethod
-    def _dict_to_file(x, f):
-        """Output dictionary to file."""
-        try:
-            with TextWriter(f) as writer:
-                yaml.safe_dump(x, writer, default_flow_style=False,
-                    width=sys.maxint, allow_unicode=True, encoding='utf-8')
-        except (IOError, YAMLError):
-            raise ValueError("failed to output dictionary to file ~ {!r}".format(x))
-    
-    @staticmethod
-    def _dict_to_string(x):
-        """Convert dictionary to string."""
-        
-        try:
-            s = yaml.safe_dump(x, default_flow_style=True, width=sys.maxint,
-                allow_unicode=True, encoding='ascii')
-            assert isinstance(s, basestring)
-        except (AssertionError, UnicodeEncodeError, YAMLError):
-            raise ValueError("failed to convert dict to string ~ {!r}".format(x))
-        
-        s = s.rstrip('\n')
-        
-        return s
-    
-    @staticmethod
-    def _float_from_file(f):
-        """Get float from file."""
-        with TextReader(f) as fh:
-            s = fh.read().strip()
-        return _Chaperon._float_from_string(s)
-    
-    @staticmethod
-    def _float_from_string(s):
-        """Get float from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['float'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to create float from string ~ {!r}".format(s))
-        return x
-    
-    @staticmethod
-    def _float_to_file(x, f):
-        """Output float to file."""
-        s = str(x)
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _get_type_name(x):
-        """Get type name of object."""
-        
-        for t in _Chaperon.supported_types:
-            if _Chaperon.supported_types[t].match(x):
-                return t
-        
-        raise TypeError("unknown gactfunc parameter/return type ~ {!r}".format(type(x).__name__))
-    
-    @staticmethod
-    def _int_from_file(f):
-        """Get integer from file."""
-        with TextReader(f) as fh:
-            s = fh.read().strip()
-        return _Chaperon._int_from_string(s)
-    
-    @staticmethod
-    def _int_from_string(s):
-        """Get integer from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['int'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to create int from string ~ {!r}".format(s))
-        return x
-    
-    @staticmethod
-    def _int_to_file(x, f):
-        """Output integer to file."""
-        s = str(x)
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _list_from_file(f):
-        """Get list from file."""
-        
-        with TextReader(f) as reader:
-            
-            document_ended = False
-            x = list()
-            
-            for line in reader:
-                
-                # Strip comments.
-                try:
-                    i = line.index('#')
-                except ValueError:
-                    pass
-                else:
-                    line = line[:i]
-                
-                # Strip leading/trailing whitespace.
-                line = line.strip()
-                
-                # Skip lines after explicit document end.
-                if document_ended:
-                    if line != '':
-                        raise RuntimeError("list elements found after document end")
-                    continue
-                
-                # Check for document separator.
-                if line == '---':
-                    raise RuntimeError("expected a single document in list stream")
-                
-                try:
-                    element = yaml.safe_load(line)
-                except YAMLError as e:
-                    # If explicit document end, flag and continue to next line..
-                    if e.problem == "expected the node content, but found '<document end>'":
-                        document_ended = True
-                        element = None
-                        continue
-                    else:
-                        raise e
-                
-                # Append line.
-                x.append(element)
-            
-            # Strip trailing null values.
-            while len(x) > 0 and x[-1] is None:
-                x.pop()
-        
-        return x
-    
-    @staticmethod
-    def _list_from_string(s):
-        """Get list from input str/unicode."""
-        
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of string type ~ {!r}".format(s))
-        
-        if not ( s.startswith('[') and s.endswith(']') ):
-            s = '[' + s + ']'
-        
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['list'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to parse list from string ~ {!r}".format(s))
-        
-        return x
-    
-    @staticmethod
-    def _list_to_file(x, f):
-        """Output list to file."""
-        
-        with TextWriter(f) as writer:
-            for element in x:
-                try:
-                    line = _Chaperon._object_to_string(element)
-                    writer.write( '{}\n'.format( line.rstrip('\n') ) )
-                except (IOError, ValueError):
-                    raise ValueError("failed to output list to file ~ {!r}".format(x))
-    
-    @staticmethod
-    def _list_to_string(x):
-        """Convert list to string."""
-        
-        try:
-            s = yaml.safe_dump(x, default_flow_style=True, width=sys.maxint,
-                allow_unicode=True, encoding='ascii')
-            assert isinstance(s, basestring)
-        except (AssertionError, UnicodeEncodeError, YAMLError):
-            raise ValueError("failed to convert list to string ~ {!r}".format(x))
-        
-        s = s.rstrip('\n')
-        
-        return s
-    
-    @staticmethod
-    def _NoneType_from_file(f):
-        """Get None from file."""
-        with TextReader(f) as fh:
-            s = fh.read().strip()
-        return _Chaperon._NoneType_from_string(s)
-    
-    @staticmethod
-    def _NoneType_from_string(s):
-        """Get None from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['NoneType'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to create 'NoneType' from string ~ {!r}".format(s))
-        return None
-    
-    @staticmethod
-    def _NoneType_to_file(x, f):
-        """Output None to file."""
-        s = _Chaperon._NoneType_to_string(x)
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _NoneType_to_string(x):
-        """Convert None to string."""
-        return 'null'
-    
-    @staticmethod
-    def _object_to_string(x):
-        """Convert object to string."""
-        if _Chaperon.supported_types['NoneType'].match(x):
-            s = _Chaperon._NoneType_to_string(x)
-        elif _Chaperon.supported_types['bool'].match(x):
-            s = _Chaperon._bool_to_string(x)
-        elif _Chaperon.supported_types['float'].match(x):
-            s = str(x)
-        elif _Chaperon.supported_types['int'].match(x):
-            s = str(x)
-        elif _Chaperon.supported_types['datetime'].match(x):
-            _Chaperon._datetime_to_string(x, f)
-        elif _Chaperon.supported_types['date'].match(x):
-            _Chaperon._date_to_string(x, f)
-        elif _Chaperon.supported_types['dict'].match(x):
-            s = _Chaperon._dict_to_string(x)
-        elif _Chaperon.supported_types['list'].match(x):
-            s = _Chaperon._list_to_string(x)
-        elif _Chaperon.supported_types['DataFrame'].match(x):
-            s = _Chaperon._DataFrame_to_string(x)
-        elif _Chaperon.supported_types['str'].match(x):
-            s = x
-        else:
-            raise ValueError("failed to convert object of unsupported type ({!r}) to string".format(type(x).__name__))
-        return s
-    
-    @staticmethod
-    def _str_from_file(f):
-        """Get unicode string from file."""
-        with TextReader(f) as fh:
-            s = fh.read().rstrip()
-        return _Chaperon._str_from_string(s)
-    
-    @staticmethod
-    def _str_from_string(s):
-        """Get unicode string from input str/unicode."""
-        if not isinstance(s, basestring):
-            raise TypeError("object is not of type string ~ {!r}".format(s))
-        try:
-            x = yaml.safe_load(s)
-            assert _Chaperon.supported_types['str'].match(x)
-        except (AssertionError, YAMLError):
-            raise ValueError("failed to create unicode string from input str/unicode ~ {!r}".format(s))
-        return x
-    
-    @staticmethod
-    def _str_to_file(s, f):
-        """Output unicode string to file."""
-        with TextWriter(f) as fh:
-            fh.write('{}\n'.format(s))
-    
-    @staticmethod
-    def _validate_delimitable(x):
-        """Validate delimitable object type."""
-        
-        t = _Chaperon._get_type_name(x)
-        
-        if t == 'str':
-            
-            _Chaperon._validate_ductile(x)
-            
-        elif t == 'dict':
-            
-            for key, value in x.items():
-                _Chaperon._validate_ductile(key)
-                _Chaperon._validate_ductile(value)
-            
-        elif t == 'list':
-            
-            for element in x:
-                _Chaperon._validate_ductile(element)
-            
-        elif not _Chaperon.supported_types[t].is_delimitable:
-            raise TypeError("{} is not delimitable ~ {!r}".format(t, x))
-    
-    @staticmethod
     def _validate_ductile(x):
-        """Validate ductile object type."""
+        u"""Validate ductile object type."""
         
-        t = _Chaperon._get_type_name(x)
+        object_type = type(x)
         
-        if t == 'str':
+        try:
+            ductile = _Chaperon.supported_types[object_type].is_ductile
+        except KeyError:
+            raise TypeError("unknown gactfunc parameter/return type ~ {!r}".format(
+                object_type.__name__))
+        
+        if object_type == unicode:
             
-            if '\n' in x:
-                raise ValueError("string is not ductile ~ {!r}".format(x))
+            if any( line_break in x for line_break in (u'\n', u'\r', u'\r\n') ):
+                raise ValueError("unicode string is not ductile ~ {!r}".format(x))
             
-        elif t == 'dict':
+        elif object_type == dict:
             
             for key, value in x.items():
                 _validate_ductile(key)
                 _validate_ductile(value)
             
-        elif t == 'list':
+        elif object_type == list:
             
             for element in x:
                 _validate_ductile(element)
             
-        elif not _Chaperon.supported_types[t].is_ductile:
-            raise TypeError("{} is not ductile ~ {!r}".format(t, x))
+        elif not ductile:
+            raise TypeError("{} is not ductile ~ {!r}".format(
+                object_type.__name__, x))
     
     @classmethod
-    def from_file(cls, filepath, type_name):
-        """Get chaperon object from file."""
-        if type_name not in _Chaperon.supported_types:
-            raise TypeError("unsupported type ~ {!r}".format(type_name))
-        func_name = '_{}_from_file'.format(type_name)
-        function = getattr(cls, func_name)
-        x = function(filepath)
-        return _Chaperon(x, type_name)
+    def from_file(cls, filepath, object_type):
+        u"""Get chaperon object from file."""
+        try:
+            x = _Chaperon._from_file[object_type](filepath)
+        except KeyError:
+            raise TypeError("unsupported type ~ {!r}".format(type(x).__name__))
+        return _Chaperon(x)
         
     @classmethod
-    def from_string(cls, string, type_name):
-        """Get chaperon object from input string."""
-        if type_name not in _Chaperon.supported_types:
-            raise TypeError("unsupported type ~ {!r}".format(type_name))
-        func_name = '_{}_from_string'.format(type_name)
-        function = getattr(cls, func_name)
-        x = function(string)
-        return _Chaperon(x, type_name)
-    
-    @property
-    def type_name(self):
-        """Get chaperoned object."""
-        return self._type_name
+    def from_line(cls, string, object_type):
+        u"""Get chaperon object from single-line string."""
+        try:
+            x = _Chaperon._from_line[object_type](string)
+        except KeyError:
+            raise TypeError("unsupported type ~ {!r}".format(type(x).__name__))
+        return _Chaperon(x)
     
     @property
     def value(self):
-        """Get chaperoned object."""
+        u"""Get chaperoned object."""
         return self._obj
     
-    def __init__(self, x, type_name):
-        
-        if type_name not in _Chaperon.supported_types:
-            raise TypeError("unsupported type ~ {!r}".format(type_name))
-        
-        if not _Chaperon.supported_types[type_name].match(x):
-            raise TypeError("object must be of type {}, not {}".format(
-                type_name, type(x).__name__))
-        
-        self._type_name = type_name
-        
+    def __init__(self, x):
+        if type(x) not in _Chaperon.supported_types:
+            raise TypeError("unsupported type ~ {!r}".format(type(x).__name__))
         self._obj = x
         
     def __repr__(self):
         return '_Chaperon({})'.format( repr(self._obj) )
         
     def __str__(self):
-        return _Chaperon._object_to_string(self._obj)
+        return fsencode( self._to_line[type(self._obj)](self._obj) )
+    
+    def __unicode__(self):
+        return self._to_line[type(self._obj)](self._obj)
         
     def to_file(self, filepath):
-        """Output chaperoned object to file."""
-        func_name = '_{}_to_file'.format(self._type_name)
-        function = getattr(self, func_name)
-        function(self._obj, filepath)
+        u"""Output chaperoned object to file."""
+        self._to_file[type(self._obj)](self._obj, filepath)
 
 class gactfunc(object):
-    """A gactfunc wrapper class."""
+    u"""A gactfunc wrapper class."""
     
     @property
     def ap_spec(self):
         try:
-            return deepcopy(self._data['ap_spec'])
+            return deepcopy(self._data[u'ap_spec'])
         except KeyError:
             self._update_ap_spec()
-            return deepcopy(self._data['ap_spec'])
+            return deepcopy(self._data[u'ap_spec'])
     
     @property
     def commands(self):
-        return self._data['commands']
+        return self._data[u'commands']
     
     @property
     def description(self):
-        return self._data['description']
+        return self._data[u'description']
     
     @property
     def function(self):
-        return self._data['function']
+        return self._data[u'function']
     
     @property
     def iop(self):
-        return deepcopy(self._data['iop'])
+        return deepcopy(self._data[u'iop'])
     
     @property
     def param_spec(self):
-        return deepcopy(self._data['param_spec'])
+        return deepcopy(self._data[u'param_spec'])
     
     @property
     def params(self):
-        return self._data['param_spec'].keys()
+        return self._data[u'param_spec'].keys()
     
     @property
     def return_spec(self):
-        return deepcopy(self._data['return_spec'])
+        return deepcopy(self._data[u'return_spec'])
     
     @property
     def summary(self):
-        return self._data['summary']
+        return self._data[u'summary']
     
     @staticmethod
     def _parse_function_docstring(function):
-        """Parse gactfunc docstring.
+        u"""Parse gactfunc docstring.
         
         This function parses a gactfunc docstring and returns an ordered
         dictionary mapping headers to documentation. A gactfunc docstring
@@ -869,36 +673,36 @@ class gactfunc(object):
         doc_info = None
         
         # Parse docstring if present.
-        if docstring is not None and docstring.strip() != '':
+        if docstring is not None and docstring.strip() != u'':
             
             # Init raw docstring.
             raw_info = OrderedDict()
             
             # Split docstring into lines.
-            lines = deque( docstring.split('\n'))
+            lines = deque( docstring.split(u'\n'))
             
             # Set summary from first non-blank line.
             line = lines.popleft().strip()
-            if line == '':
+            if line == u'':
                 line = lines.popleft().strip()
-                if line == '':
+                if line == u'':
                     raise ValueError("{} docstring summary is a blank line".format(func_name))
-            raw_info['Summary'] = [line]
+            raw_info[u'Summary'] = [line]
             
             # Check summary followed by a blank line.
             if len(lines) > 0:
                 line = lines.popleft().strip()
-                if line != '':
+                if line != u'':
                     raise ValueError("{} docstring summary is not followed by a blank line".format(func_name))
             
             # Get list of remaining lines, with common indentation removed.
-            lines = deque( (dedent( '\n'.join(lines) ) ).split('\n') )
+            lines = deque( (dedent( u'\n'.join(lines) ) ).split(u'\n') )
             
             # Init docstring description.
-            raw_info['Description'] = list()
+            raw_info[u'Description'] = list()
             
             # Docstring description includes everything before the first header.
-            h = 'Description'
+            h = u'Description'
             
             # Group content by docstring section.
             while len(lines) > 0:
@@ -907,7 +711,7 @@ class gactfunc(object):
                 line = lines.popleft()
                 
                 # Try to match line to a docstring header.
-                m = _info['regex']['docstring_header'].match(line)
+                m = _info[u'regex'][u'docstring_header'].match(line)
                 
                 # If matches, set header of new section..
                 if m is not None:
@@ -916,15 +720,15 @@ class gactfunc(object):
                     h = m.group(1)
                     
                     # Map header to alias, if relevant.
-                    if h in _info['docstring_headers']['alias_mapping']:
-                        h = _info['docstring_headers']['alias_mapping'][h]
+                    if h in _info[u'docstring_headers'][u'alias_mapping']:
+                        h = _info[u'docstring_headers'][u'alias_mapping'][h]
                     
                     # Check header is known.
-                    if h not in _info['docstring_headers']['known']:
+                    if h not in _info[u'docstring_headers'][u'known']:
                         raise ValueError("unknown docstring header ~ {!r}".format(h))
                     
                     # Check header is supported.
-                    if h not in _info['docstring_headers']['supported']:
+                    if h not in _info[u'docstring_headers'][u'supported']:
                         raise ValueError("unsupported docstring header ~ {!r}".format(h))
                     
                     # Check for duplicate headers.
@@ -938,8 +742,8 @@ class gactfunc(object):
                     raw_info[h].append(line)
             
             # Remove docstring description, if empty.
-            if len(raw_info['Description']) == 0:
-                del raw_info['Description']
+            if len(raw_info[u'Description']) == 0:
+                del raw_info[u'Description']
             
             # Init parsed docstring.
             doc_info = OrderedDict()
@@ -950,7 +754,7 @@ class gactfunc(object):
                 # Get docstring section as unindented lines.
                 raw_info[h] = ( dedent( '\n'.join(raw_info[h]) ) ).split('\n')
                 
-                if h == 'Args':
+                if h == u'Args':
                     
                     # Init parsed parameter info.
                     param_info = OrderedDict()
@@ -963,10 +767,10 @@ class gactfunc(object):
                         line = line.strip()
                         
                         # Skip blank lines.
-                        if line != '':
+                        if line != u'':
                             
                             # Try to match line to expected pattern of parameter.
-                            m = _info['regex']['docstring_param'].match(line)
+                            m = _info[u'regex'][u'docstring_param'].match(line)
                             
                             # If this is a parameter definition line, get parameter info..
                             if m is not None:
@@ -974,7 +778,7 @@ class gactfunc(object):
                                 param_name, type_name, param_desc = m.groups()
                                 
                                 # Check parameter does not denote unenumerated arguments.
-                                if param_name.startswith('*'):
+                                if param_name.startswith(u'*'):
                                     raise RuntimeError("{} docstring must not specify unenumerated arguments".format(
                                         func_name))
                                 
@@ -983,14 +787,19 @@ class gactfunc(object):
                                     raise ValueError("{} docstring must specify a type for parameter {!r}".format(
                                         func_name, param_name))
                                 
-                                # Check type name is not 'None'.
-                                if type_name == 'None':
+                                try: # Get type of parameter.
+                                    param_type = _Chaperon._name2type[type_name]
+                                except KeyError:
+                                    raise ValueError("{} docstring specifies unknown type {!r} for parameter {!r}".format(
+                                        func_name, type_name, param_name))
+                                
+                                # Check parameter type is not NoneType.
+                                if param_type is NoneType:
                                     raise ValueError("{} docstring specifies 'NoneType' for parameter {!r}".format(
                                         func_name, param_name))
                                 
-                                # Check parameter type can be obtained from string or file.
-                                if not ( _Chaperon.supported_types[type_name].is_ductile or
-                                    _Chaperon.supported_types[type_name].is_fileable ):
+                                # Check parameter type is supported.
+                                if param_type not in _Chaperon.supported_types:
                                     raise ValueError("{} docstring specifies unsupported type {!r} for parameter {!r}".format(
                                         func_name, type_name, param_name))
                                 
@@ -1000,16 +809,16 @@ class gactfunc(object):
                                         func_name, param_name))
                                 
                                 param_info[param_name] = {
-                                    'type': type_name,
-                                    'description': param_desc
+                                    u'type': param_type,
+                                    u'description': param_desc
                                 }
                             
                             # ..otherwise if parameter defined, treat this as
                             # a continuation of the parameter description..
                             elif param_name is not None:
                                 
-                                param_info[param_name]['description'] = '{} {}'.format(
-                                    param_info[param_name]['description'], line)
+                                param_info[param_name][u'description'] = u'{} {}'.format(
+                                    param_info[param_name][u'description'], line)
                             
                             # ..otherwise this is not a valid docstring parameter.
                             else:
@@ -1020,13 +829,13 @@ class gactfunc(object):
                     for param_name in param_info:
                         
                         # Try to match default definition pattern in parameter description.
-                        defaults = _info['regex']['docstring_default'].findall(
-                            param_info[param_name]['description'])
+                        defaults = _info[u'regex'][u'docstring_default'].findall(
+                            param_info[param_name][u'description'])
                         
                         # If a default definition matched, keep
                         # string representation of default value..
                         if len(defaults) == 1:
-                            param_info[param_name]['docstring_default'] = defaults[0]
+                            param_info[param_name][u'docstring_default'] = defaults[0]
                         # ..otherwise the description has ambiguous default info.
                         elif len(defaults) > 1:
                             raise ValueError("{} docstring has multiple defaults for parameter {!r}".format(
@@ -1035,10 +844,10 @@ class gactfunc(object):
                     # Set parsed parameter info for docstring.
                     doc_info[h] = param_info
                     
-                elif h == 'Returns':
+                elif h == u'Returns':
                     
-                    type_name = None
                     description = list()
+                    param_type = None
                     
                     # Process each line of return value section.
                     for line in raw_info[h]:
@@ -1046,10 +855,10 @@ class gactfunc(object):
                         line = line.strip()
                         
                         # Skip blank lines.
-                        if line != '':
+                        if line != u'':
                             
                             # Try to match line to expected pattern of return value.
-                            m = _info['regex']['docstring_return'].match(line)
+                            m = _info[u'regex'][u'docstring_return'].match(line)
                             
                             # If return value type info is present,
                             # get type info and initial description..
@@ -1063,19 +872,25 @@ class gactfunc(object):
                                     raise ValueError("{} docstring must specify a type for return value".format(
                                         func_name))
                                 
-                                # Check type name is not 'None'.
-                                if type_name == 'None':
-                                    raise ValueError("{} docstring specifies 'None' for return value".format(
+                                try: # Get type of parameter.
+                                    param_type = _Chaperon._name2type[type_name]
+                                except KeyError:
+                                    raise ValueError("{} docstring specifies unknown type {!r} for return value".format(
+                                        func_name, type_name))
+                                
+                                # Check return value type is not NoneType.
+                                if param_type is NoneType:
+                                    raise ValueError("{} docstring specifies 'NoneType' for return value".format(
                                         func_name))
                                 
                                 # Check return value type is supported.
-                                if type_name not in _Chaperon.supported_types:
+                                if param_type not in _Chaperon.supported_types:
                                     raise ValueError("{} docstring specifies unsupported type {!r} for return value".format(
-                                        func_name, type_name ))
+                                        func_name, type_name))
                             
                             # ..otherwise if return value type already
                             # identified, append line to description..
-                            elif type_name is not None:
+                            elif param_type is not None:
                                 
                                 description.append(line)
                                 
@@ -1086,8 +901,8 @@ class gactfunc(object):
                     
                     # Set parsed return value info for docstring.
                     doc_info[h] = {
-                        'type': type_name,
-                        'description': ' '.join(description)
+                        u'type': param_type,
+                        u'description': u' '.join(description)
                     }
                     
                 else:
@@ -1095,15 +910,15 @@ class gactfunc(object):
                     # Strip leading/trailing blank lines.
                     lines = raw_info[h]
                     for i in (0, -1):
-                        while len(lines) > 0 and lines[i].strip() == '':
+                        while len(lines) > 0 and lines[i].strip() == u'':
                             lines.pop(i)
-                    doc_info[h] = '\n'.join(lines)
+                    doc_info[h] = u'\n'.join(lines)
         
         return doc_info
     
     @staticmethod
     def _parse_function_name(function):
-        """Parse gactfunc name."""
+        u"""Parse gactfunc name."""
         
         # Get function name.
         func_name = function.__name__
@@ -1113,11 +928,11 @@ class gactfunc(object):
             return TypeError("object is not a function ~ {!r}".format(func_name))
         
         # Try to match function name to expected gactfunc pattern.
-        m = _info['regex']['gactfunc'].match(func_name)
+        m = _info[u'regex'][u'gactfunc'].match(func_name)
         
         try: # Split gactfunc name into commands.
             assert m is not None
-            commands = tuple( func_name.split('_') )
+            commands = tuple( func_name.split(u'_') )
             assert len(commands) >= 2
             assert len(set(commands)) == len(commands)
         except AssertionError:
@@ -1126,54 +941,67 @@ class gactfunc(object):
         return commands
 
     @staticmethod
-    def _validate_param_type(x, type_name=None):
-        """Validate parameter object type."""
+    def _validate_param_type(x, expected_type=None):
+        u"""Validate parameter object type."""
         
-        t = _Chaperon._get_type_name(x)
+        object_type = type(x)
         
-        if type_name is not None and t != type_name:
-            raise TypeError("parameter type ({}) differs from that expected ({})".format(
-                t, type_name))
+        if expected_type is not None:
+            
+            if not isinstance(expected_type, type):
+                raise TypeError("argument 'expected_type' is not a type object ~ {!r}".format(
+                    expected_type))
+            
+            if object_type != expected_type:
+                raise TypeError("parameter type ({}) differs from that expected ({})".format(
+                    object_type, type_name))
         
-        if t == 'str':
+        if object_type == unicode:
         
             _validate_ductile(x)
         
-        elif t == 'dict':
+        elif object_type == dict:
         
             for key, value in x.items():
                 _validate_ductile(key)
                 _validate_ductile(value)
         
-        elif t == 'list':
+        elif object_type == list:
         
             for element in x:
                 _validate_ductile(element)
         
-        elif not _Chaperon.supported_types[t].is_ductile:
-            raise TypeError("{} is not a valid parameter object ~ {!r}".format(t, x))
+        elif not _Chaperon.supported_types[object_type].is_ductile:
+            raise TypeError("{} is not a valid parameter object ~ {!r}".format(
+                object_type.__name__, x))
         
     @staticmethod
-    def _validate_return_type(x, type_name=None):
-        """Validate return value type."""
+    def _validate_return_type(x, expected_type=None):
+        u"""Validate return value type."""
         
-        t = _Chaperon._get_type_name(x)
+        object_type = type(x)
         
-        if type_name is not None and t != type_name:
-            raise TypeError("return value type ({}) differs from that expected ({})".format(
-                t, type_name))
+        if expected_type is not None:
+            
+            if not isinstance(expected_type, type):
+                raise TypeError("argument 'expected_type' is not a type object ~ {!r}".format(
+                    expected_type))
+            
+            if object_type != expected_type:
+                raise TypeError("parameter type ({}) differs from that expected ({})".format(
+                    object_type, type_name))
         
-        if t == 'str':
+        if object_type == unicode:
             
             _validate_ductile(x)
             
-        elif t == 'dict':
+        elif object_type == dict:
             
             for key, value in x.items():
                 _validate_ductile(key)
                 _validate_ductile(value)
             
-        elif t == 'list':
+        elif object_type == list:
             
             try:
                 for element in x:
@@ -1182,11 +1010,12 @@ class gactfunc(object):
                 for element in x:
                     _validate_delimitable(element)
             
-        elif t not in _Chaperon.supported_types:
-            raise TypeError("{} is not a valid return value object ~ {!r}".format(t, x))
+        elif object_type not in _Chaperon.supported_types:
+            raise TypeError("{} is not a valid return value object ~ {!r}".format(
+                object_type, x))
         
     def __init__(self, function):
-        """Init gactfunc wrapper from wrapped function."""
+        u"""Init gactfunc wrapper from wrapped function."""
         
         # Init gactfunc data.
         self._data = dict()
@@ -1195,7 +1024,7 @@ class gactfunc(object):
         func_name = function.__name__
         
         # Get commands from function name.
-        self._data['commands'] = self._parse_function_name(function)
+        self._data[u'commands'] = self._parse_function_name(function)
         
         # Get function argspec.
         arg_spec = getargspec(function)
@@ -1209,7 +1038,7 @@ class gactfunc(object):
         param_names = arg_spec.args
         
         # Check for reserved parameter names.
-        res_params = [ p for p in param_names if p in _info['reserved_params'] ]
+        res_params = [ p for p in param_names if p in _info[u'reserved_params'] ]
         if len(res_params) > 0:
             raise ValueError("{} {!r} uses reserved parameter names ~ {!r}".format(
                 self.__class__.__name__, func_name, res_params))
@@ -1230,21 +1059,21 @@ class gactfunc(object):
             raise ValueError("{} {!r} is not documented".format(
                 self.__class__.__name__, func_name))
         
-        self._data['summary'] = doc_info['Summary']
+        self._data[u'summary'] = doc_info[u'Summary']
         
-        if 'Description' in doc_info:
-            self._data['description'] = doc_info['Description']
+        if u'Description' in doc_info:
+            self._data[u'description'] = doc_info[u'Description']
         else:
-            self._data['description'] = None
+            self._data[u'description'] = None
         
         # If parameters documented, validate them..
-        if 'Args' in doc_info:
+        if u'Args' in doc_info:
             
             # Set gactfunc parameter info from parsed docstring.
-            self._data['param_spec'] = doc_info['Args']
+            self._data[u'param_spec'] = doc_info[u'Args']
             
             # Get set of documented parameters.
-            doc_param_set = set(self._data['param_spec'])
+            doc_param_set = set(self._data[u'param_spec'])
             
             # Get set of parameters specified in function definition.
             spec_param_set = set(param_names)
@@ -1266,14 +1095,14 @@ class gactfunc(object):
                 
                 for param_name, default in spec_def_info.items():
                     
-                    self._data['param_spec'][param_name]['default'] = default
+                    self._data[u'param_spec'][param_name][u'default'] = default
                     
                     # Skip unspecified defaults as we cannot validate them.
                     if default is None:
                         continue
                     
                     # Get parameter type.
-                    type_name = self._data['param_spec'][param_name]['type']
+                    type_name = self._data[u'param_spec'][param_name][u'type']
                     
                     # Check that the defined default value is of the
                     # type specified in the function documentation.
@@ -1284,15 +1113,15 @@ class gactfunc(object):
                             func_name, param_name))
                     
                     # Skip undocumented defaults.
-                    if 'docstring_default' not in self._data['param_spec'][param_name]:
+                    if u'docstring_default' not in self._data[u'param_spec'][param_name]:
                         continue
                     
                     # Get string representation of docstring default.
-                    docstring_default = self._data['param_spec'][param_name]['docstring_default']
+                    docstring_default = self._data[u'param_spec'][param_name][u'docstring_default']
                     
                     try: # Coerce documented default from string.
-                        coerced_default = _Chaperon._object_from_string(docstring_default, type_name)
-                    except (TypeError, ValueError):
+                        coerced_default = _Chaperon._from_line[type_name](docstring_default)
+                    except (KeyError, TypeError, ValueError):
                         raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
                             func_name, param_name))
                     
@@ -1306,10 +1135,10 @@ class gactfunc(object):
             if len(param_names) > 0:
                 raise ValueError("{} parameters defined but not documented ~ {!r}".format(
                     func_name, param_names))
-            self._data['param_spec'] = None
+            self._data[u'param_spec'] = None
             
         # Init input/output parameter set info.
-        self._data['iop'] = { channel: None for channel in _info['iop'] }
+        self._data[u'iop'] = { channel: None for channel in _info[u'iop'] }
         
         # Check if function contains explicit return.
         explicit_return = any( token == 'return' for token in
@@ -1318,31 +1147,31 @@ class gactfunc(object):
         # If gactfunc has explicit return, check that it is
         # documented, then set return spec and IO pattern.
         if explicit_return:
-            if not 'Returns' in doc_info:
+            if not u'Returns' in doc_info:
                 raise ValueError("{} return value defined but not documented".format(
                     func_name))
-            self._data['return_spec'] = doc_info['Returns']
-            self._data['iop']['output'] = { 'type': 'returned' }
+            self._data[u'return_spec'] = doc_info[u'Returns']
+            self._data[u'iop'][u'output'] = { u'type': u'returned' }
         
         # ..otherwise, check that no return value was documented.
         else:
-            if 'Returns' in doc_info:
+            if u'Returns' in doc_info:
                 raise ValueError("{} return value documented but not defined".format(
                     func_name))
-            self._data['return_spec'] = None
+            self._data[u'return_spec'] = None
             
         # Get info on gactfunc input/output (IO) patterns.
-        for channel in _info['iop']:
+        for channel in _info[u'iop']:
             
             # Check for each IO pattern, store info on matching pattern.
-            for iop in _info['iop'][channel]:
+            for iop in _info[u'iop'][channel]:
                 
                 # Get info on this IO pattern.
-                regex, metavar, flag = [ _info['iop'][channel][iop][k]
-                    for k in ('regex', 'metavar', 'flag') ]
+                regex, metavar, flag = [ _info[u'iop'][channel][iop][k]
+                    for k in (u'regex', u'metavar', u'flag') ]
                 
                 # Skip return-value IO pattern, already done.
-                if iop == 'returned':
+                if iop == u'returned':
                     continue
                 
                 # Try to match parameter names to those expected for this parameter set.
@@ -1357,48 +1186,48 @@ class gactfunc(object):
                     continue
                 
                 # Store matching IO pattern, checking for any conflicts.
-                if self._data['iop'][channel] is not None:
+                if self._data[u'iop'][channel] is not None:
                     raise ValueError("{} has conflicting {} IO patterns ~ {!r}".format(
-                        func_name, channel, (self._data['iop'][channel]['type'], iop)))
-                self._data['iop'][channel] = { 'type': iop }
+                        func_name, channel, (self._data[u'iop'][channel][u'type'], iop)))
+                self._data[u'iop'][channel] = { u'type': iop }
                 
                 # Store parameter info for each parameter in this set.
                 for param_name in param2match:
                     
                     # If these are indexed input/output files, store
                     # parameter name by index, preferably as an integer..
-                    if iop == 'indexed':
-                        i = param2match[param_name].group('index')
+                    if iop == u'indexed':
+                        i = param2match[param_name].group(u'index')
                         try:
                             i = int(i)
                         except ValueError:
                             pass
-                        self._data['iop'][channel].setdefault('params', dict())
-                        self._data['iop'][channel]['params'][i] = param_name
+                        self._data[u'iop'][channel].setdefault(u'params', dict())
+                        self._data[u'iop'][channel][u'params'][i] = param_name
                         
                     # ..otherwise store set of parameter names.
                     else:
-                        self._data['iop'][channel].setdefault('params', set())
-                        self._data['iop'][channel]['params'].add(param_name)
+                        self._data[u'iop'][channel].setdefault(u'params', set())
+                        self._data[u'iop'][channel][u'params'].add(param_name)
                         
                     # Check parameter type is as expected.
-                    type_name = self._data['param_spec'][param_name]['type']
-                    if type_name != 'str':
-                        raise TypeError("{} {} parameter must be of type string, not {} ~ {!r}".format(
+                    param_type = self._data[u'param_spec'][param_name][u'type']
+                    if param_type != unicode:
+                        raise TypeError("{} {} parameter must be of type unicode, not {!r} ~ {!r}".format(
                             func_name, channel, type_name, param_name))
                     
-                if iop == 'indexed':
+                if iop == u'indexed':
                     
                     # Check indexed parameters are as expected:
                     # * numbered indices start at 1, increment by 1
                     # * unindexed parameter not present without indexed parameters
-                    indices = self._data['iop'][channel]['params'].keys()
-                    numbers = sorted( i for i in indices if i != 'U' )
+                    indices = self._data[u'iop'][channel][u'params'].keys()
+                    numbers = sorted( i for i in indices if i != u'U' )
                     if numbers[0] != 1 or any( j - i != 1
                         for i, j in zip(numbers[:-1], numbers[1:]) ):
                         raise ValueError("sparse indices in {} parameters of {}".format(
                             channel, func_name))
-                    if 'U' in indices and len(indices) == 1:
+                    if u'U' in indices and len(indices) == 1:
                         raise ValueError("{} defines unindexed {1} parameter but not indexed {1} parameters".format(
                             func_name, channel))
                     
@@ -1406,33 +1235,33 @@ class gactfunc(object):
                     # * numbered indices start at 1, increment by 1
                     # * unindexed parameter not present without indexed parameters
                     indices = [ i for i, p in
-                        self._data['iop'][channel]['params'].items()
-                        if 'default' not in self._data['param_spec'][p] ]
-                    numbers = sorted( i for i in indices if i != 'U' )
+                        self._data[u'iop'][channel][u'params'].items()
+                        if u'default' not in self._data[u'param_spec'][p] ]
+                    numbers = sorted( i for i in indices if i != u'U' )
                     if numbers[0] != 1 or any( j - i != 1
                         for i, j in zip(numbers[:-1], numbers[1:]) ):
                         raise ValueError("sparse indices in required {} parameters of {}".format(
                             channel, func_name))
-                    if 'U' in indices and len(indices) == 1:
+                    if u'U' in indices and len(indices) == 1:
                         raise ValueError("{} requires unindexed {1} parameter but not indexed {1} parameters".format(
                             func_name, channel))
         
         self.__name__ = function.__name__
-        self._data['function'] = function
+        self._data[u'function'] = function
 
     def __call__(self, *args, **kwargs):
-        """Call gactfunc wrapper."""
+        u"""Call gactfunc wrapper."""
         return self.function(*args, **kwargs)
 
     def _update_ap_spec(self):
         
         # Set argparser spec info from deep copy of gactfunc info.
         ap_spec = OrderedDict([
-            ('commands',       deepcopy(self._data['commands'])),
-            ('summary',         deepcopy(self._data['summary'])),
-            ('description', deepcopy(self._data['description'])),
-            ('params',       deepcopy(self._data['param_spec'])),
-            ('iop',                 deepcopy(self._data['iop']))
+            (u'commands',       deepcopy(self._data[u'commands'])),
+            (u'summary',         deepcopy(self._data[u'summary'])),
+            (u'description', deepcopy(self._data[u'description'])),
+            (u'params',       deepcopy(self._data[u'param_spec'])),
+            (u'iop',                 deepcopy(self._data[u'iop']))
         ])
         
         # Init input/output parameter mappings.
@@ -1441,58 +1270,58 @@ class gactfunc(object):
         
         # If gactfunc has explicit return value,
         # create a command-line parameter for it.
-        if self._data['return_spec'] is not None:
+        if self._data[u'return_spec'] is not None:
             
-            ap_spec.setdefault('params', OrderedDict())
+            ap_spec.setdefault(u'params', OrderedDict())
             
             # Set special parameter name for return value.
-            param_name = 'retfile'
+            param_name = u'retfile'
             
             # Set parameter info for return-value option.
-            ap_spec['params'][param_name] = {
-                'default': '-',
-                'description': self._data['return_spec']['description'],
-                'flag': _info['iop']['output']['returned']['flag'],
-                'metavar': _info['iop']['output']['returned']['metavar'],
-                'type': self._data['return_spec']['type']
+            ap_spec[u'params'][param_name] = {
+                u'default': u'-',
+                u'description': self._data[u'return_spec'][u'description'],
+                u'flag': _info[u'iop'][u'output'][u'returned'][u'flag'],
+                u'metavar': _info[u'iop'][u'output'][u'returned'][u'metavar'],
+                u'type': self._data[u'return_spec'][u'type']
             }
             
-            param2channel['retfile'] = 'output'
-            param2iop['retfile'] = 'returned'
+            param2channel[u'retfile'] = u'output'
+            param2iop[u'retfile'] = u'returned'
             
             # Update argparser spec with return-value option.
-            ap_spec['iop']['output']['params'] = set(['retfile'])
+            ap_spec[u'iop'][u'output'][u'params'] = set([u'retfile'])
         
         # Get info for IO parameters.
-        for channel in ap_spec['iop']:
+        for channel in ap_spec[u'iop']:
             
             # Skip if no relevant parameters.
-            if ap_spec['iop'][channel] is None:
+            if ap_spec[u'iop'][channel] is None:
                 continue
             
             # Get IO pattern type.
-            iop = ap_spec['iop'][channel]['type']
+            iop = ap_spec[u'iop'][channel][u'type']
             
             # Skip return-value IO pattern, already done.
-            if iop == 'returned':
+            if iop == u'returned':
                 continue
             
             # Get info on this IO pattern.
-            regex, metavar, flag = [ _info['iop'][channel][iop][k]
-                for k in ('regex', 'metavar', 'flag') ]
+            regex, metavar, flag = [ _info[u'iop'][channel][iop][k]
+                for k in (u'regex', u'metavar', u'flag') ]
             
             # Get parameter names.
-            if iop == 'indexed':
-                param_names = ap_spec['iop'][channel]['params'].values()
+            if iop == u'indexed':
+                param_names = ap_spec[u'iop'][channel][u'params'].values()
             else:
-                param_names = list(ap_spec['iop'][channel]['params'])
+                param_names = list(ap_spec[u'iop'][channel][u'params'])
             
             # Update parameter info.
             for param_name in param_names:
                 
-                ap_spec['params'][param_name].update({
-                    'metavar': regex.sub(metavar, param_name),
-                    'flag': regex.sub(flag, param_name)
+                ap_spec[u'params'][param_name].update({
+                    u'metavar': regex.sub(metavar, param_name),
+                    u'flag': regex.sub(flag, param_name)
                 })
                 
                 param2channel[param_name] = channel
@@ -1502,29 +1331,29 @@ class gactfunc(object):
         flag2param = dict()
         
         # Prepare parameters for argument parser.
-        for param_name in ap_spec['params']:
+        for param_name in ap_spec[u'params']:
             
             # Get info for this parameter.
-            param_info = ap_spec['params'][param_name]
+            param_info = ap_spec[u'params'][param_name]
             
             # Set parameter name to be used in argument parser.
-            param_info['dest'] = param_name
+            param_info[u'dest'] = param_name
             
             # If parameter has a default value, set as option or switch..
-            if 'default' in param_info:
+            if u'default' in param_info:
                 
-                param_info['required'] = False
+                param_info[u'required'] = False
                 
                 # If default value is False, assign to switches..
-                if param_info['type'] == 'bool' and param_info['default'] is False:
-                    param_info['group'] = 'switch'
+                if param_info[u'type'] == bool and param_info[u'default'] is False:
+                    param_info[u'group'] = u'switch'
                 # ..otherwise assign to optionals.
                 else:
-                    param_info['group'] = 'optional'
+                    param_info[u'group'] = u'optional'
                 
             # ..otherwise, assign to positional parameters.
             else:
-                param_info['group'] = 'positional'
+                param_info[u'group'] = u'positional'
             
             # If this for input/output, change to IO parameter..
             if param_name in param2channel:
@@ -1534,51 +1363,51 @@ class gactfunc(object):
                 # Input/output parameters are treated as optionals. If
                 # parameter was positional, set default value, using
                 # standard input or output where appropriate.
-                if param_info['group'] == 'positional':
+                if param_info[u'group'] == u'positional':
                     
                     iop = param2iop[param_name]
                     
-                    if ( iop == 'indexed' and
-                        param_name == ap_spec['iop'][channel]['params'][1] ):
-                        param_info['required'] = False
-                        param_info['default'] = '-'
-                    elif iop == 'listed':
-                        param_info['required'] = False
-                        param_info['default'] = ['-']
-                    elif iop == 'single':
-                        param_info['required'] = False
-                        param_info['default'] = '-'
+                    if ( iop == u'indexed' and
+                        param_name == ap_spec[u'iop'][channel][u'params'][1] ):
+                        param_info[u'required'] = False
+                        param_info[u'default'] = u'-'
+                    elif iop == u'listed':
+                        param_info[u'required'] = False
+                        param_info[u'default'] = [u'-']
+                    elif iop == u'single':
+                        param_info[u'required'] = False
+                        param_info[u'default'] = u'-'
                     else:
-                        param_info['required'] = True
-                        param_info['default'] = None
+                        param_info[u'required'] = True
+                        param_info[u'default'] = None
                 
                 # Mark as IO parameter.
-                param_info['group'] = 'IO'
+                param_info[u'group'] = u'IO'
                 
             # ..otherwise if parameter has a short form, convert to short form..
-            elif param_name in _info['short_params']:
+            elif param_name in _info[u'short_params']:
                 
                 # Check that this is not a compound type.
-                if _Chaperon.supported_types[ param_info['type'] ].is_compound:
-                    raise TypeError("cannot create short-form parameter {!r} of type {}".format(
-                        param_name, param_info['type']))
+                if _Chaperon.supported_types[ param_info[u'type'] ].is_compound:
+                    raise TypeError("cannot create short-form parameter {!r} of type {!r}".format(
+                        param_name, param_info[u'type'].__name__))
                 
                 # Set flag to short form.
-                param_info['flag'] = _info['short_params'][param_name]['flag']
+                param_info[u'flag'] = _info[u'short_params'][param_name][u'flag']
                 
                 # Check parameter type matches that of short-form.
-                if param_info['type'] != _info['short_params'][param_name]['type']:
+                if param_info[u'type'] != _info[u'short_params'][param_name][u'type']:
                     raise TypeError("{} has type mismatch for short-form parameter {!r}".format(
                         self.__name__, param_name))
                 
                 # Short form parameters are treated as optionals.
                 # If parameter was positional, set as required.
-                if param_info['group'] == 'positional':
-                    param_info['required'] = True
-                    param_info['default'] = None
+                if param_info[u'group'] == u'positional':
+                    param_info[u'required'] = True
+                    param_info[u'default'] = None
                 
                 try: # Check parameter default matches that of short-form.
-                    assert param_info['default'] == _info['short_params'][param_name]['default']
+                    assert param_info[u'default'] == _info[u'short_params'][param_name][u'default']
                 except AssertionError:
                     raise ValueError("{} has default value mismatch for short-form parameter {!r}".format(
                         self.__name__, param_name))
@@ -1586,7 +1415,7 @@ class gactfunc(object):
                     pass
                 
                 try: # Check parameter requirement matches that of short-form.
-                    assert param_info['required'] == _info['short_params'][param_name]['required']
+                    assert param_info[u'required'] == _info[u'short_params'][param_name][u'required']
                 except AssertionError:
                     raise ValueError("{} has requirement mismatch for short-form parameter {!r}".format(
                         self.__name__, param_name))
@@ -1594,85 +1423,85 @@ class gactfunc(object):
                     pass
                 
                 # Mark as short form optional.
-                param_info['group'] = 'short'
+                param_info[u'group'] = u'short'
                 
             # ..otherwise if parameter is of a compound type, create up to two
             # (mutually exclusive) parameters: one to accept argument as string
             # (if ductile), the other to load it from a file (if fileable)..
-            elif _Chaperon.supported_types[ param_info['type'] ].is_compound:
+            elif _Chaperon.supported_types[ param_info[u'type'] ].is_compound:
                 
                 # Compound parameters are treated as optionals.
                 # If parameter was positional, set as required.
-                if param_info['group'] == 'positional':
-                    param_info['required'] = True
-                    param_info['default'] = None
+                if param_info[u'group'] == u'positional':
+                    param_info[u'required'] = True
+                    param_info[u'default'] = None
                 
                 # Mark as 'compound'.
-                param_info['group'] = 'compound'
+                param_info[u'group'] = u'compound'
                 
                 # Set compound parameter title.
-                param_info['title'] = '{} argument'.format( param_name.replace('_', '-') )
+                param_info[u'title'] = u'{} argument'.format( param_name.replace(u'_', u'-') )
                 
                 # If parameter is of a ductile type, set flag for
                 # it to be passed directly on the command line.
-                if _Chaperon.supported_types[ param_info['type'] ].is_ductile:
-                    param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
+                if _Chaperon.supported_types[ param_info[u'type'] ].is_ductile:
+                    param_info[u'flag'] = u'--{}'.format( param_name.replace(u'_', u'-') )
                 
                 # Set file parameter name.
-                param_info['file_dest'] = '{}_file'.format(param_name)
+                param_info[u'file_dest'] = u'{}_file'.format(param_name)
                 
                 # Set flag for parameter to be passed as a file.
-                param_info['file_flag'] = file_flag = '--{}-file'.format( param_name.replace('_', '-') )
+                param_info[u'file_flag'] = file_flag = u'--{}-file'.format( param_name.replace(u'_', u'-') )
                 
                 # Check that file option string does
                 # not conflict with existing options.
                 if file_flag in flag2param:
                     raise ValueError("file flag of {} parameter {!r} conflicts with {!r}".format(
                         self.__name__, param_name, flag2param[file_flag]))
-                flag2param[file_flag] = '{} file flag'.format(param_name)
+                flag2param[file_flag] = u'{} file flag'.format(param_name)
                 
             # ..otherwise if option or switch,
             # create flag from parameter name.
-            elif param_info['group'] in ('optional', 'switch'):
+            elif param_info[u'group'] in (u'optional', u'switch'):
                 
                 if len(param_name) > 1:
-                    param_info['flag'] = '--{}'.format( param_name.replace('_', '-') )
+                    param_info[u'flag'] = u'--{}'.format( param_name.replace(u'_', u'-') )
                 else:
-                    param_info['flag'] = '-{}'.format(param_name)
+                    param_info[u'flag'] = u'-{}'.format(param_name)
                 
             # Append info to argument description as appropriate.
-            if param_info['group'] != 'positional':
-                if param_info['default'] is not None:
-                    if param_info['group'] != 'switch' and not 'docstring_default' in param_info:
-                        param_info['description'] = '{} [default: {!r}]'.format(
-                            param_info['description'], param_info['default'])
-                elif param_info['required']:
-                    param_info['description'] = '{} [required]'.format(
-                        param_info['description'])
+            if param_info[u'group'] != u'positional':
+                if param_info[u'default'] is not None:
+                    if param_info[u'group'] != u'switch' and not u'docstring_default' in param_info:
+                        param_info[u'description'] = u'{} [default: {!r}]'.format(
+                            param_info[u'description'], param_info[u'default'])
+                elif param_info[u'required']:
+                    param_info[u'description'] = u'{} [required]'.format(
+                        param_info[u'description'])
             
             try: # Delete docstring default - no longer needed.
-                del param_info['docstring_default']
+                del param_info[u'docstring_default']
             except KeyError:
                 pass
             
             # Check for conflicting option strings.
-            if 'flag' in param_info:
-                flag = param_info['flag']
+            if u'flag' in param_info:
+                flag = param_info[u'flag']
                 if flag in flag2param:
                     raise ValueError("flag of {} parameter {!r} conflicts with {!r}".format(
                         self.__name__, param_name, flag2param[flag]))
                 flag2param[flag] = param_name
             
             # Update parameter info.
-            ap_spec['params'][param_name] = param_info
+            ap_spec[u'params'][param_name] = param_info
             
-        self._data['ap_spec'] = ap_spec
+        self._data[u'ap_spec'] = ap_spec
 
 class _GactfuncCollection(MutableMapping):
-    """A gactfunc collection class."""
+    u"""A gactfunc collection class."""
     
     def __init__(self):
-        """Init gactfunc collection."""
+        u"""Init gactfunc collection."""
         self._data = dict()
     
     def __delitem__(self, key):
@@ -1722,7 +1551,7 @@ class _GactfuncCollection(MutableMapping):
                 self.__class__.__name__, commands))
         
         if not isinstance(value, (_GactfuncCollection, _GactfuncSpec)):
-            raise TypeError("{} object does not support values of type {}".format(
+            raise TypeError("{} object does not support values of type {!r}".format(
                 self.__class__.__name__, type(value).__name__))
         
         try: # Set value of object indexed by the sequence of commands.
@@ -1764,7 +1593,7 @@ class _GactfuncCollection(MutableMapping):
                 yield func_spec
     
     def load(self):
-        """Load gactfunc collection info."""
+        u"""Load gactfunc collection info."""
         
         # Load gactfunc collection info.
         gaction_file = os.path.join('data', 'gfi.p')
@@ -1774,7 +1603,7 @@ class _GactfuncCollection(MutableMapping):
         self._data = loaded._data
         
     def populate(self):
-        """Populate gactfunc collection from GACTutil package modules.
+        u"""Populate gactfunc collection from GACTutil package modules.
         
         NB: this function should only be called during package setup.
         """
@@ -1889,94 +1718,97 @@ class _GactfuncCollection(MutableMapping):
                 ap_spec = func_spec.ap_spec
                 
                 # Set gactfunc summary.
-                cap.summary = ap_spec['summary']
+                cap.summary = ap_spec[u'summary']
                 
                 # Set gactfunc description, if present.
-                if ap_spec['description'] is not None:
-                    cap.description = '\n\n{}'.format(ap_spec['description'])
+                if ap_spec[u'description'] is not None:
+                    cap.description = u'\n\n{}'.format(ap_spec[u'description'])
                 
                 # If gactfunc has parameters..
-                if 'params' in ap_spec:
+                if u'params' in ap_spec:
                     
                     # ..add each parameter to the argument parser.
-                    for param_name in ap_spec['params']:
+                    for param_name in ap_spec[u'params']:
                         
                         # Get info for this parameter.
-                        param_info = ap_spec['params'][param_name]
+                        param_info = ap_spec[u'params'][param_name]
                         
-                        if param_info['group'] == 'positional':
+                        # Get parameter type name.
+                        type_name = param_info[u'type'].__name__
+                        
+                        if param_info[u'group'] == u'positional':
                             
-                            cap.add_argument(param_info['dest'],
-                                help = param_info['description'])
+                            cap.add_argument(param_info[u'dest'],
+                                help = param_info[u'description'])
                             
-                        elif param_info['group'] == 'optional':
+                        elif param_info[u'group'] == u'optional':
                             
-                            cap.add_argument(param_info['flag'],
-                                dest     = param_info['dest'],
-                                metavar  = param_info['type'].upper(),
-                                default  = param_info['default'],
-                                required = param_info['required'],
-                                help     = param_info['description'])
+                            cap.add_argument(param_info[u'flag'],
+                                dest     = param_info[u'dest'],
+                                metavar  = type_name.upper(),
+                                default  = param_info[u'default'],
+                                required = param_info[u'required'],
+                                help     = param_info[u'description'])
                             
-                        elif param_info['group'] == 'short':
+                        elif param_info[u'group'] == u'short':
                             
-                            cap.add_argument(param_info['flag'],
-                                dest     = param_info['dest'],
-                                default  = param_info['default'],
-                                required = param_info['required'],
-                                help     = param_info['description'])
+                            cap.add_argument(param_info[u'flag'],
+                                dest     = param_info[u'dest'],
+                                default  = param_info[u'default'],
+                                required = param_info[u'required'],
+                                help     = param_info[u'description'])
                             
-                        elif param_info['group'] == 'switch':
+                        elif param_info[u'group'] == u'switch':
                             
-                            cap.add_argument(param_info['flag'],
-                                dest   = param_info['dest'],
+                            cap.add_argument(param_info[u'flag'],
+                                dest   = param_info[u'dest'],
                                 action = 'store_true',
-                                help   = param_info['description'])
+                                help   = param_info[u'description'])
                             
-                        elif param_info['group'] == 'compound':
+                        elif param_info[u'group'] == u'compound':
                             
                             # If compound object parameter is of a parameter type,
                             # prepare to read from command line or load from file..
-                            if _Chaperon.supported_types[ param_info['type'] ].is_ductile:
+                            if _Chaperon.supported_types[ param_info[u'type'] ].is_ductile:
                                 
                                 # Set info for pair of alternative parameters.
-                                item_help = 'Set {} from string.'.format(param_info['type'])
-                                file_help = 'Load {} from file.'.format(param_info['type'])
+                                item_help = 'Set {} from string.'.format(type_name)
+                                file_help = 'Load {} from file.'.format(type_name)
                                 
                                 # Add (mutually exclusive) pair of alternative parameters.
                                 ag = cap.add_argument_group(
-                                    title       = param_info['title'],
-                                    description = param_info['description'])
+                                    title       = param_info[u'title'],
+                                    description = param_info[u'description'])
                                 mxg = ag.add_mutually_exclusive_group(
-                                    required    = param_info['required'])
-                                mxg.add_argument(param_info['flag'],
-                                    dest        = param_info['dest'],
+                                    required    = param_info[u'required'])
+                                mxg.add_argument(param_info[u'flag'],
+                                    dest        = param_info[u'dest'],
                                     metavar     = 'STR',
-                                    default     = param_info['default'],
+                                    default     = param_info[u'default'],
                                     help        = item_help)
-                                mxg.add_argument(param_info['file_flag'],
-                                    dest        = param_info['file_dest'],
+                                mxg.add_argument(param_info[u'file_flag'],
+                                    dest        = param_info[u'file_dest'],
                                     metavar     = 'PATH',
                                     help        = file_help)
                                 
                             # ..otherwise prepare to load it from file.
                             else:
                                 
-                                cap.add_argument(param_info['file_flag'],
-                                    dest     = param_info['file_dest'],
+                                cap.add_argument(param_info[u'file_flag'],
+                                    dest     = param_info[u'file_dest'],
                                     metavar  = 'PATH',
-                                    default  = param_info['default'],
-                                    required = param_info['required'],
-                                    help     = param_info['description'])
+                                    default  = param_info[u'default'],
+                                    required = param_info[u'required'],
+                                    help     = param_info[u'description'])
                                 
-                        elif param_info['group'] == 'IO':
+                        elif param_info[u'group'] == u'IO':
                             
-                            cap.add_argument(param_info['flag'],
-                                dest     = param_info['dest'],
-                                metavar  = param_info['metavar'],
-                                default  = param_info['default'],
-                                required = param_info['required'],
-                                help     = param_info['description'])
+                            cap.add_argument(param_info[u'flag'],
+                                dest     = param_info[u'dest'],
+                                metavar  = param_info[u'metavar'],
+                                default  = param_info[u'default'],
+                                required = param_info[u'required'],
+                                help     = param_info[u'description'])
                 
                 # Set module and function name for this gactfunc.
                 cap.set_defaults(
@@ -1987,21 +1819,21 @@ class _GactfuncCollection(MutableMapping):
         return ap
     
     def proc_args(self, args):
-        """Process parsed command-line arguments."""
+        u"""Process parsed command-line arguments."""
         
         # Pop return-value output file, if present.
-        retfile = args.__dict__.pop('retfile', None)
+        retfile = args.__dict__.pop(u'retfile', None)
         
         try: # Pop gactfunc info, get function.
-            mod_name = args.__dict__.pop('gactfunc_module')
-            func_name = args.__dict__.pop('gactfunc_function')
+            mod_name = args.__dict__.pop(u'gactfunc_module')
+            func_name = args.__dict__.pop(u'gactfunc_function')
             module = import_module(mod_name)
             function = getattr(module, func_name)
         except KeyError:
             raise RuntimeError("cannot run command - no function available")
         
         # Get parameter info for this gactfunc.
-        param_info = function.ap_spec['params']
+        param_info = function.ap_spec[u'params']
         
         # Process each argument.
         for param_name in function.params:
@@ -2010,7 +1842,7 @@ class _GactfuncCollection(MutableMapping):
             filebound = False
             
             # Get expected argument type.
-            type_name = param_info[param_name]['type']
+            param_type = param_info[param_name][u'type']
             
             # Get argument value.
             try:
@@ -2020,10 +1852,10 @@ class _GactfuncCollection(MutableMapping):
             
             # If parameter is in compound group,
             # check both alternative arguments.
-            if param_info[param_name]['group'] == 'compound':
+            if param_info[param_name][u'group'] == u'compound':
                 
                 # Get file argument value.
-                file_arg = args.__dict__[ param_info[param_name]['file_dest'] ]
+                file_arg = args.__dict__[ param_info[param_name][u'file_dest'] ]
                 
                 # If file argument specified, set argument value from file
                 # argument, indicate argument value is to be loaded from file..
@@ -2031,23 +1863,23 @@ class _GactfuncCollection(MutableMapping):
                     arg = file_arg
                     filebound = True
                 # ..otherwise check argument specified (if required).
-                elif arg is None and param_info[param_name]['required']:
-                    raise RuntimeError("{} is required".format(param_info['title']))
+                elif arg is None and param_info[param_name][u'required']:
+                    raise RuntimeError("{} is required".format(param_info[u'title']))
                 
                 # Remove file parameter from parsed arguments.
-                del args.__dict__[ param_info[param_name]['file_dest'] ]
+                del args.__dict__[ param_info[param_name][u'file_dest'] ]
             
             # If argument specified, get from file or string.
             if arg is not None:
                 if filebound:
-                    args.__dict__[param_name] = _Chaperon.from_file(arg, type_name).value
-                elif param_info[param_name]['group'] != 'switch':
-                    args.__dict__[param_name] = _Chaperon.from_string(arg, type_name).value
+                    args.__dict__[param_name] = _Chaperon.from_file(arg, param_type).value
+                elif param_info[param_name][u'group'] != u'switch':
+                    args.__dict__[param_name] = _Chaperon.from_line(arg, param_type).value
         
         return function, args, retfile
     
     def walk(self):
-        """Generate nodes of gactfunc command tree.
+        u"""Generate nodes of gactfunc command tree.
         
         Yields:
             tuple: Contains three elements: `commands` are the keys specifying
@@ -2109,7 +1941,7 @@ class _GactfuncCollection(MutableMapping):
 ################################################################################
 
 def gaction(argv=None):
-    """Run gaction command."""
+    u"""Run gaction command."""
     
     if argv is None:
         argv = sys.argv[1:]
@@ -2122,12 +1954,11 @@ def gaction(argv=None):
     
     function, args, retfile = gf.proc_args(args)
     
-    result = function( **vars(args) )
+    return_value = function( **vars(args) )
      
-    if function.return_spec is not None:
-        return_type = function.return_spec['type']
-        return_value = _Chaperon(result, return_type)
-        return_value.to_file(retfile)
+    if function.return_spec is not None and return_value is not None:
+        result = _Chaperon(return_value)
+        result.to_file(retfile)
 
 def main():
     gaction()

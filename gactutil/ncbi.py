@@ -1,6 +1,6 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-"""GACTutil NCBI utilities."""
+u"""GACTutil NCBI utilities."""
 
 from socket import error as SocketError
 from time import sleep
@@ -15,16 +15,16 @@ from gactutil import _read_setting
 _info = {
     
     # Set list of known NCBI query faults.
-    'faults': ('WarningList', 'ErrorList'),
+    u'faults': ('WarningList', 'ErrorList'),
     
     # Number of seconds to wait if NCBI server appears to be busy.
-    'polite_delay': 60.0
+    u'polite_delay': 60.0
 }
 
 ################################################################################
 
 def check_efetch(**kwargs):
-    """Wrapper function for Entrez efetch."""
+    u"""Wrapper function for Entrez efetch."""
     
     result = None
         
@@ -36,11 +36,11 @@ def check_efetch(**kwargs):
     
     # Set Entrez email attribute from argument or setting.
     try:
-        email = kwargs.pop('email')
+        email = kwargs.pop(u'email')
         assert isinstance(email, basestring)
     except (AssertionError, KeyError):
         try:
-            email = _read_setting('email')
+            email = _read_setting(u'email')
             assert isinstance(email, basestring)
         except (AssertionError, RuntimeError):
             raise RuntimeError("Entrez efetch failed - please provide an email address")
@@ -52,7 +52,7 @@ def check_efetch(**kwargs):
             request = Entrez.efetch(**kwargs)
             result = Entrez.read(request)
         except (HTTPError, RuntimeError, SocketError, URLError):
-            sleep( _info('polite_delay') )
+            sleep( _info(u'polite_delay') )
         else:
             break
     
@@ -61,9 +61,9 @@ def check_efetch(**kwargs):
         raise RuntimeError("Entrez efetch failed after {!r} attempts".format(attempts))
     
     # Validate result.
-    if any( fault in result for fault in _info['faults'] ):
+    if any( fault in result for fault in _info[u'faults'] ):
         msg = 'check parameters'
-        for fault in _info['faults']:
+        for fault in _info[u'faults']:
             if 'OutputMessage' in result[fault]:
                 msg = '\n'.join( result[fault]['OutputMessage'] )
                 break
@@ -72,7 +72,7 @@ def check_efetch(**kwargs):
     return result
 
 def check_esearch(**kwargs):
-    """Wrapper function for Entrez esearch."""
+    u"""Wrapper function for Entrez esearch."""
     
     result = None
     
@@ -84,11 +84,11 @@ def check_esearch(**kwargs):
     
     # Set Entrez email attribute from argument or setting.
     try:
-        email = kwargs.pop('email')
+        email = kwargs.pop(u'email')
         assert isinstance(email, basestring)
     except (AssertionError, KeyError):
         try: 
-            email = _read_setting('email')
+            email = _read_setting(u'email')
             assert isinstance(email, basestring)
         except (AssertionError, RuntimeError):
             raise RuntimeError("Entrez esearch failed - please provide an email address")
@@ -100,7 +100,7 @@ def check_esearch(**kwargs):
             request = Entrez.esearch(**kwargs)
             result = Entrez.read(request)
         except (HTTPError, RuntimeError, SocketError, URLError):
-            sleep( _info('polite_delay') )
+            sleep( _info(u'polite_delay') )
         else:
             break
     
@@ -109,9 +109,9 @@ def check_esearch(**kwargs):
         raise RuntimeError("Entrez esearch failed after {!r} attempts".format(attempts))
     
     # Validate result.
-    if any( fault in result for fault in faults ):
+    if any( fault in result for fault in _info[u'faults'] ):
         msg = "check parameters"
-        for fault in faults:
+        for fault in _info[u'faults']:
             if 'OutputMessage' in result[fault]:
                 msg = '\n'.join( result[fault]['OutputMessage'] )
                 break
