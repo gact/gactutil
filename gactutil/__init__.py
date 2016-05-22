@@ -100,9 +100,7 @@ class TextReader(TextRW):
         
         super(TextReader, self).__init__()
         
-        if not isinstance(filepath, unicode):
-            raise TypeError("filepath must be of type unicode, not {!r}".format(
-                type(filepath).__name__))
+        filepath = fsdecode(filepath)
         
         # If filepath indicates standard input, 
         # prepare to read from standard input..
@@ -380,9 +378,7 @@ class TextWriter(TextRW):
         
         super(TextWriter, self).__init__()
         
-        if not isinstance(filepath, unicode):
-            raise TypeError("filepath must be of type unicode, not {!r}".format(
-                type(filepath).__name__))
+        filepath = fsdecode(filepath)
         
         # Assume uncompressed output.
         compress_output = False
