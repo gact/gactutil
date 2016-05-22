@@ -39,6 +39,7 @@ from gactutil import fsdecode
 from gactutil import fsencode
 from gactutil import TextReader
 from gactutil import TextWriter
+from gactutil.core.frozen import FrozenDict
 from gactutil.core.yaml import unidump
 from gactutil.core.yaml import uniload
 from gactutil.core.yaml import unidump_scalar
@@ -247,20 +248,20 @@ def _DataFrame_to_file(x, f):
     except (IOError, OSError):
         raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
 
-def _dict_from_file(f):
-    u"""Get dictionary from file."""
+def _FrozenDict_from_file(f):
+    u"""Get FrozenDict from file."""
     
     try:
         with TextReader(f) as reader:
             x = uniload(reader)
-        assert type(x) == dict
-    except (AssertionError, IOError, YAMLError):
-        raise ValueError("failed to read valid dict from file ~ {!r}".format(f))
+        x = FrozenDict(x)
+    except (IOError, TypeError, YAMLError):
+        raise ValueError("failed to read valid FrozenDict from file ~ {!r}".format(f))
     
     return x
 
-def _dict_from_line(s):
-    u"""Get dictionary from input string."""
+def _FrozenDict_from_line(s):
+    u"""Get FrozenDict from single-line string."""
     
     s = fsdecode(s)
     
@@ -269,38 +270,32 @@ def _dict_from_line(s):
     
     try:
         x = uniload(s)
-        assert type(x) == dict
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to convert string to valid dict ~ {!r}".format(s))
+        x = FrozenDict(x)
+    except (TypeError, YAMLError):
+        raise ValueError("failed to convert string to valid FrozenDict ~ {!r}".format(s))
     
     return x
 
-def _dict_to_file(x, f):
-    u"""Output dictionary to file."""
-    
-    if type(x) != dict:
-        raise TypeError("argument must be of type dict, not {!r}".format(
-            type(x).__name__))
+def _FrozenDict_to_file(x, f):
+    u"""Output FrozenDict to file."""
     
     try:
+        x = x.to_dict()
         with TextWriter(f) as writer:
             unidump(x, writer, default_flow_style=False, width=sys.maxint)
     except (IOError, YAMLError):
-        raise ValueError("failed to output dict to file ~ {!r}".format(x))
+        raise ValueError("failed to output FrozenDict to file ~ {!r}".format(x))
 
-def _dict_to_line(x):
-    u"""Convert dictionary to a single-line unicode string."""
-    
-    if type(x) != dict:
-        raise TypeError("argument must be of type dict, not {!r}".format(
-            type(x).__name__))
+def _FrozenDict_to_line(x):
+    u"""Convert FrozenDict to a single-line unicode string."""
     
     try:
+        x = x.to_dict()
         s = unidump(x, default_flow_style=True, width=sys.maxint)
         s = s.rstrip(u'\n')
         assert u'\n' not in s
     except (AssertionError, YAMLError):
-        raise ValueError("failed to convert dict to unicode ~ {!r}".format(x))
+        raise ValueError("failed to convert FrozenDict to unicode ~ {!r}".format(x))
     
     return s
 
@@ -340,7 +335,7 @@ def _list_from_file(f):
             
             # Load element from line.
             if line.startswith(u'{') and line.endswith(u'}'):
-                element = _dict_from_line(line)
+                element = _FrozenDict_from_line(line)
             elif line.startswith(u'[') and line.endswith(u']'):
                 element = _list_from_line(line)
             else:
@@ -356,7 +351,7 @@ def _list_from_file(f):
     return x
 
 def _list_from_line(s):
-    u"""Get list from string."""
+    u"""Get list from single-line string."""
     
     s = fsdecode(s)
     
@@ -384,8 +379,8 @@ def _list_to_file(x, f):
             
             try:
                 # Convert element to a single-line.
-                if isinstance(element, dict):
-                    line = _dict_to_line(element)
+                if isinstance(element, FrozenDict):
+                    line = _FrozenDict_to_line(element)
                 elif isinstance(element, list):
                     line = _list_to_line(element)
                 else:
@@ -420,7 +415,7 @@ def _scalar_from_file(f, scalar_type=None):
     return _scalar_from_line(s, scalar_type=scalar_type)
 
 def _scalar_from_line(s, scalar_type=None):
-    u"""Get scalar from string."""
+    u"""Get scalar from single-line string."""
     
     s = fsdecode(s)
     
@@ -449,85 +444,85 @@ class _Chaperon(object):
     # loaded from a file or converted from a simple string. NB: types should be
     # checked in order (e.g. bool before int, datetime before date).
     supported_types = OrderedDict([
-        #                 COMPOUND   DUCTILE  FILEABLE
-        (NoneType,  _GFTS(   False,     True,     True)),
-        (bool,      _GFTS(   False,     True,     True)),
-        (unicode,   _GFTS(   False,     True,     True)),
-        (float,     _GFTS(   False,     True,     True)),
-        (int,       _GFTS(   False,     True,     True)),
-        (datetime,  _GFTS(   False,     True,     True)),
-        (date,      _GFTS(   False,     True,     True)),
-        (dict,      _GFTS(    True,     True,     True)),
-        (list,      _GFTS(    True,     True,     True)),
-        (DataFrame, _GFTS(    True,    False,     True))
+        #                  COMPOUND   DUCTILE  FILEABLE
+        (NoneType,    _GFTS(   False,     True,     True)),
+        (bool,        _GFTS(   False,     True,     True)),
+        (unicode,     _GFTS(   False,     True,     True)),
+        (float,       _GFTS(   False,     True,     True)),
+        (int,         _GFTS(   False,     True,     True)),
+        (datetime,    _GFTS(   False,     True,     True)),
+        (date,        _GFTS(   False,     True,     True)),
+        (FrozenDict,  _GFTS(    True,     True,     True)),
+        (list,        _GFTS(    True,     True,     True)),
+        (DataFrame,   _GFTS(    True,    False,     True))
     ])
     
     # Mapping of each supported type name to its corresponding type object.
     _name2type = OrderedDict([
-        (u'NoneType',  NoneType),
-        (u'bool',      bool),
-        (u'unicode',   unicode),
-        (u'float',     float),
-        (u'int',       int),
-        (u'datetime',  datetime),
-        (u'date',      date),
-        (u'dict',      dict),
-        (u'list',      list),
-        (u'DataFrame', DataFrame)
+        (u'NoneType',    NoneType),
+        (u'bool',        bool),
+        (u'unicode',     unicode),
+        (u'float',       float),
+        (u'int',         int),
+        (u'datetime',    datetime),
+        (u'date',        date),
+        (u'FrozenDict',  FrozenDict),
+        (u'list',        list),
+        (u'DataFrame',   DataFrame)
     ])
     
     # Mapping of each supported type to its corresponding file-loading function.
     _from_file = OrderedDict([
-        (NoneType,  partial(_scalar_from_file, scalar_type=NoneType)),
-        (bool,      partial(_scalar_from_file, scalar_type=bool)),
-        (unicode,   partial(_scalar_from_file, scalar_type=unicode)),
-        (float,     partial(_scalar_from_file, scalar_type=float)),
-        (int,       partial(_scalar_from_file, scalar_type=int)),
-        (datetime,  partial(_scalar_from_file, scalar_type=datetime)),
-        (date,      partial(_scalar_from_file, scalar_type=date)),
-        (dict,      _dict_from_file),
-        (list,      _list_from_file),
-        (DataFrame, _DataFrame_from_file)
+        (NoneType,    partial(_scalar_from_file, scalar_type=NoneType)),
+        (bool,        partial(_scalar_from_file, scalar_type=bool)),
+        (unicode,     partial(_scalar_from_file, scalar_type=unicode)),
+        (float,       partial(_scalar_from_file, scalar_type=float)),
+        (int,         partial(_scalar_from_file, scalar_type=int)),
+        (datetime,    partial(_scalar_from_file, scalar_type=datetime)),
+        (date,        partial(_scalar_from_file, scalar_type=date)),
+        (FrozenDict,  _FrozenDict_from_file),
+        (list,        _list_from_file),
+        (DataFrame,   _DataFrame_from_file)
     ])
     
     # Mapping of each supported type to its corresponding line-loading function.
     _from_line = OrderedDict([
-        (NoneType,  partial(_scalar_from_line, scalar_type=NoneType)),
-        (bool,      partial(_scalar_from_line, scalar_type=bool)),
-        (unicode,   partial(_scalar_from_line, scalar_type=unicode)),
-        (float,     partial(_scalar_from_line, scalar_type=float)),
-        (int,       partial(_scalar_from_line, scalar_type=int)),
-        (datetime,  partial(_scalar_from_line, scalar_type=datetime)),
-        (date,      partial(_scalar_from_line, scalar_type=date)),
-        (dict,      _dict_from_line),
-        (list,      _list_from_line)
+        (NoneType,    partial(_scalar_from_line, scalar_type=NoneType)),
+        (bool,        partial(_scalar_from_line, scalar_type=bool)),
+        (unicode,     partial(_scalar_from_line, scalar_type=unicode)),
+        (float,       partial(_scalar_from_line, scalar_type=float)),
+        (int,         partial(_scalar_from_line, scalar_type=int)),
+        (datetime,    partial(_scalar_from_line, scalar_type=datetime)),
+        (date,        partial(_scalar_from_line, scalar_type=date)),
+        (FrozenDict,  _FrozenDict_from_line),
+        (list,        _list_from_line)
     ])
     
     # Mapping of each supported type to its corresponding file-dumping function.
     _to_file = OrderedDict([
-        (NoneType,  _scalar_to_file),
-        (bool,      _scalar_to_file),
-        (unicode,   _scalar_to_file),
-        (float,     _scalar_to_file),
-        (int,       _scalar_to_file),
-        (datetime,  _scalar_to_file),
-        (date,      _scalar_to_file),
-        (dict,      _dict_to_file),
-        (list,      _list_to_file),
-        (DataFrame, _DataFrame_to_file)
+        (NoneType,    _scalar_to_file),
+        (bool,        _scalar_to_file),
+        (unicode,     _scalar_to_file),
+        (float,       _scalar_to_file),
+        (int,         _scalar_to_file),
+        (datetime,    _scalar_to_file),
+        (date,        _scalar_to_file),
+        (FrozenDict,  _FrozenDict_to_file),
+        (list,        _list_to_file),
+        (DataFrame,   _DataFrame_to_file)
     ])
     
     # Mapping of each supported type to its corresponding line-dumping function.
     _to_line = OrderedDict([
-        (NoneType,  _scalar_to_line),
-        (bool,      _scalar_to_line),
-        (unicode,   _scalar_to_line),
-        (float,     _scalar_to_line),
-        (int,       _scalar_to_line),
-        (datetime,  _scalar_to_line),
-        (date,      _scalar_to_line),
-        (dict,      _dict_to_line),
-        (list,      _list_to_line)
+        (NoneType,    _scalar_to_line),
+        (bool,        _scalar_to_line),
+        (unicode,     _scalar_to_line),
+        (float,       _scalar_to_line),
+        (int,         _scalar_to_line),
+        (datetime,    _scalar_to_line),
+        (date,        _scalar_to_line),
+        (FrozenDict,  _FrozenDict_to_line),
+        (list,        _list_to_line)
     ])
     
     @staticmethod
@@ -547,7 +542,7 @@ class _Chaperon(object):
             if any( line_break in x for line_break in (u'\n', u'\r', u'\r\n') ):
                 raise ValueError("unicode string is not ductile ~ {!r}".format(x))
             
-        elif object_type == dict:
+        elif object_type == FrozenDict:
             
             for key, value in x.items():
                 _validate_ductile(key)
@@ -960,7 +955,7 @@ class gactfunc(object):
         
             _validate_ductile(x)
         
-        elif object_type == dict:
+        elif object_type == FrozenDict:
         
             for key, value in x.items():
                 _validate_ductile(key)
@@ -995,7 +990,7 @@ class gactfunc(object):
             
             _validate_ductile(x)
             
-        elif object_type == dict:
+        elif object_type == FrozenDict:
             
             for key, value in x.items():
                 _validate_ductile(key)
@@ -1632,7 +1627,8 @@ class _GactfuncCollection(MutableMapping):
         for mod_name, mod_path in mod_info.items():
             
             # Skip modules in which gactfuncs should not be defined.
-            if mod_name in ('gactutil', 'gactutil.gaction'):
+            if mod_name.startswith('gactutil.core') or mod_name in ('gactutil',
+                'gactutil.gaction'):
                 continue
             
             # Load module.

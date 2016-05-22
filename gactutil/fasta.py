@@ -27,9 +27,8 @@ def recode_fasta(infile, outfile, mapping):
     Args:
         infile (unicode): Input FASTA file.
         outfile (unicode): Output FASTA file.
-        mapping (dict): Mapping of old item names to new names.
+        mapping (FrozenDict): Mapping of old item names to new names.
     """
-    get_fasta(infile)
     pass
 
 ################################################################################

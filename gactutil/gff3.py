@@ -8,7 +8,7 @@ def recode_gff3(infile, outfile, mapping):
     Args:
         infile (unicode): Input GFF3 file.
         outfile (unicode): Output GFF3 file.
-        mapping (dict): Mapping of old item names to new names.
+        mapping (FrozenDict): Mapping of old item names to new names.
     """
     pass
 
