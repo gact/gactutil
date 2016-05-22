@@ -114,7 +114,7 @@ class FrozenDict(Mapping):
         self.__dict__[key] = value
     
     def __str__(self):
-        return str(self._data)
+        return self.__unicode__().encode('utf_8')
     
     def __unicode__(self):
         return unicode(self._data)
@@ -295,7 +295,7 @@ class FrozenList(Sequence):
         self.__dict__[index] = value
     
     def __str__(self):
-        return str(self._data)
+        return self.__unicode__().encode('utf_8')
     
     def __unicode__(self):
         return unicode(self._data)
