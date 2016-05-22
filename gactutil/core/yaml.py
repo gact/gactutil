@@ -8,8 +8,8 @@ from datetime import date
 from datetime import datetime
 from types import NoneType
 
-from yaml import dump
-from yaml import load
+from yaml import safe_dump
+from yaml import safe_load
 from yaml import YAMLError
 from yaml.constructor import SafeConstructor
 from yaml.dumper import SafeDumper
@@ -50,36 +50,28 @@ def construct_yaml_str(self, node):
     u"""Construct YAML string as unicode, even if convertible to a byte string."""
     return self.construct_scalar(node)
 
-class UniDumper(SafeDumper):
-    u"""YAML unicode-preferring dumper."""
-    pass
+# Ensure SafeDumper represents str as str, and unicode as unicode.
+SafeDumper.add_representer(str, SafeRepresenter.represent_str)
+SafeDumper.add_representer(unicode, SafeRepresenter.represent_unicode)
 
-# Ensure UniDumper represents str as str, and unicode as unicode.
-UniDumper.add_representer(str, SafeRepresenter.represent_str)
-UniDumper.add_representer(unicode, SafeRepresenter.represent_unicode)
-
-class UniLoader(SafeLoader):
+class SafeLoader(SafeLoader):
     u"""YAML unicode-preferring loader."""
     pass
 
-# Ensure UniLoader constructs strings as unicode.
-UniLoader.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
+# Ensure SafeLoader constructs strings as unicode.
+SafeLoader.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
 
-class UniConstructor(SafeConstructor):
-    u"""YAML unicode-preferring constructor."""
-    pass
-
-# Ensure UniConstructor constructs strings as unicode.
-UniConstructor.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
+# Ensure SafeConstructor constructs strings as unicode.
+SafeConstructor.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
 
 def _init_scalar_representer_info():
     u"""Init YAML scalar representer method info."""
     
     representers = dict()
     
-    for t in UniDumper.yaml_representers:
+    for t in SafeDumper.yaml_representers:
         if t in _info[u'yaml_scalar_types']:
-            representers[t] = UniDumper.yaml_representers[t]
+            representers[t] = SafeDumper.yaml_representers[t]
     
     return representers
 
@@ -88,14 +80,14 @@ def _init_scalar_resolver_info():
     
     resolvers = dict()
     
-    for prefix in UniLoader.yaml_implicit_resolvers:
-        for tag, regexp in UniLoader.yaml_implicit_resolvers[prefix]:
+    for prefix in SafeLoader.yaml_implicit_resolvers:
+        for tag, regexp in SafeLoader.yaml_implicit_resolvers[prefix]:
             if tag in _info[u'yaml_scalar_tags']:
                 resolvers.setdefault(prefix, OrderedDict())
                 resolvers[prefix][tag] = regexp
     
     # Ensure empty string is resolved as None.
-    resolvers[u''] = OrderedDict( UniLoader.yaml_implicit_resolvers[u'~'] )
+    resolvers[u''] = OrderedDict( SafeLoader.yaml_implicit_resolvers[u'~'] )
     
     return resolvers
 
@@ -120,7 +112,7 @@ def _resolve_scalar(value):
     return u'tag:yaml.org,2002:str'
 
 # Init YAML scalar handlers.
-_scalar_constructor = UniConstructor()
+_scalar_constructor = SafeConstructor()
 _scalar_representer = SafeRepresenter()
 _scalar_representer_methods = _init_scalar_representer_info()
 _scalar_resolver_methods = _init_scalar_resolver_info()
@@ -148,18 +140,18 @@ def is_multiline_string(string):
 def unidump(data, stream=None, **kwds):
     u"""Dump data to YAML unicode stream."""
     
-    fixed = { 'Dumper': UniDumper, 'allow_unicode': True, 'encoding': None }
+    fixed_kwargs = { 'allow_unicode': True, 'encoding': None }
     
-    for k, x in fixed.items():
+    for k, x in fixed_kwargs.items():
         if k in kwds:
             raise RuntimeError("cannot set reserved keyword argument {!r}".format(k))
         kwds[k] = x
     
-    return dump(data, stream=stream, **kwds)
+    return safe_dump(data, stream=stream, **kwds)
 
 def uniload(stream):
     u"""Load data from YAML unicode stream."""
-    return load(stream, Loader=UniLoader)
+    return safe_load(stream)
 
 def unidump_scalar(data, stream=None):
     u"""Dump scalar to YAML unicode stream."""
