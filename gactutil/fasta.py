@@ -5,6 +5,7 @@ u"""GACTutil FASTA module."""
 from Bio import SeqIO
 
 from gactutil import TextReader
+from gactutil.core.frozen import FrozenList
 from gactutil.gaction import gactfunc
 
 @gactfunc
@@ -19,7 +20,7 @@ def get_fasta_headers(infile):
     """
     with TextReader(infile) as fh:
         headers = [ record.description for record in SeqIO.parse(fh, 'fasta') ]
-    return headers
+    return FrozenList(headers)
 
 def recode_fasta(infile, outfile, mapping):
     u"""Recode FASTA data.
