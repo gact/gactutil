@@ -15,7 +15,7 @@ def get_fasta_headers(infile):
         infile (unicode): Input FASTA file.
         
     Returns:
-        list: FASTA headers.
+        FrozenList: FASTA headers.
     """
     with TextReader(infile) as fh:
         headers = [ record.description for record in SeqIO.parse(fh, 'fasta') ]

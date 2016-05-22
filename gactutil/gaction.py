@@ -40,6 +40,7 @@ from gactutil import fsencode
 from gactutil import TextReader
 from gactutil import TextWriter
 from gactutil.core.frozen import FrozenDict
+from gactutil.core.frozen import FrozenList
 from gactutil.core.yaml import unidump
 from gactutil.core.yaml import uniload
 from gactutil.core.yaml import unidump_scalar
@@ -295,12 +296,12 @@ def _FrozenDict_to_line(x):
         s = s.rstrip(u'\n')
         assert u'\n' not in s
     except (AssertionError, YAMLError):
-        raise ValueError("failed to convert FrozenDict to unicode ~ {!r}".format(x))
+        raise ValueError("failed to convert FrozenDict to single-line unicode string ~ {!r}".format(x))
     
     return s
 
-def _list_from_file(f):
-    u"""Get list from file."""
+def _FrozenList_from_file(f):
+    u"""Get FrozenList from file."""
     
     with TextReader(f) as reader:
         
@@ -337,7 +338,7 @@ def _list_from_file(f):
             if line.startswith(u'{') and line.endswith(u'}'):
                 element = _FrozenDict_from_line(line)
             elif line.startswith(u'[') and line.endswith(u']'):
-                element = _list_from_line(line)
+                element = _FrozenList_from_line(line)
             else:
                 element = _scalar_from_line(line)
             
@@ -348,10 +349,10 @@ def _list_from_file(f):
         while len(x) > last_nonempty_line:
             x.pop()
     
-    return x
+    return FrozenList(x)
 
-def _list_from_line(s):
-    u"""Get list from single-line string."""
+def _FrozenList_from_line(s):
+    u"""Get FrozenList from single-line string."""
     
     s = fsdecode(s)
     
@@ -360,18 +361,14 @@ def _list_from_line(s):
     
     try:
         x = uniload(s)
-        assert type(x) == list
-    except (AssertionError, YAMLError):
-        raise ValueError("failed to convert string to valid list ~ {!r}".format(s))
+        x = FrozenList(x)
+    except (TypeError, YAMLError):
+        raise ValueError("failed to convert string to valid FrozenList ~ {!r}".format(s))
     
     return x
 
-def _list_to_file(x, f):
-    u"""Output list to file."""
-    
-    if type(x) != list:
-        raise TypeError("argument must be of type list, not {!r}".format(
-            type(x).__name__))
+def _FrozenList_to_file(x, f):
+    u"""Output FrozenList to file."""
     
     with TextWriter(f) as writer:
         
@@ -381,8 +378,8 @@ def _list_to_file(x, f):
                 # Convert element to a single-line.
                 if isinstance(element, FrozenDict):
                     line = _FrozenDict_to_line(element)
-                elif isinstance(element, list):
-                    line = _list_to_line(element)
+                elif isinstance(element, FrozenList):
+                    line = _FrozenList_to_line(element)
                 else:
                     line = _scalar_to_line(element)
                 
@@ -390,21 +387,18 @@ def _list_to_file(x, f):
                 writer.write( u'{}{}'.format(line.rstrip(u'\n'), u'\n') )
                 
             except (IOError, ValueError):
-                raise ValueError("failed to output list to file ~ {!r}".format(x))
+                raise ValueError("failed to output FrozenList to file ~ {!r}".format(x))
 
-def _list_to_line(x):
-    u"""Convert list to a single-line unicode string."""
-    
-    if type(x) != list:
-        raise TypeError("argument must be of type list, not {!r}".format(
-            type(x).__name__))
+def _FrozenList_to_line(x):
+    u"""Convert FrozenList to a single-line unicode string."""
     
     try:
+        x = x.to_list()
         s = unidump(x, default_flow_style=True, width=sys.maxint)
         s = s.rstrip(u'\n')
         assert u'\n' not in s
     except (AssertionError, YAMLError):
-        raise ValueError("failed to convert list to unicode ~ {!r}".format(x))
+        raise ValueError("failed to convert FrozenList to single-line unicode string ~ {!r}".format(x))
     
     return s
 
@@ -444,7 +438,7 @@ class _Chaperon(object):
     # loaded from a file or converted from a simple string. NB: types should be
     # checked in order (e.g. bool before int, datetime before date).
     supported_types = OrderedDict([
-        #                  COMPOUND   DUCTILE  FILEABLE
+        #                   COMPOUND   DUCTILE  FILEABLE
         (NoneType,    _GFTS(   False,     True,     True)),
         (bool,        _GFTS(   False,     True,     True)),
         (unicode,     _GFTS(   False,     True,     True)),
@@ -453,7 +447,7 @@ class _Chaperon(object):
         (datetime,    _GFTS(   False,     True,     True)),
         (date,        _GFTS(   False,     True,     True)),
         (FrozenDict,  _GFTS(    True,     True,     True)),
-        (list,        _GFTS(    True,     True,     True)),
+        (FrozenList,  _GFTS(    True,     True,     True)),
         (DataFrame,   _GFTS(    True,    False,     True))
     ])
     
@@ -467,7 +461,7 @@ class _Chaperon(object):
         (u'datetime',    datetime),
         (u'date',        date),
         (u'FrozenDict',  FrozenDict),
-        (u'list',        list),
+        (u'FrozenList',  FrozenList),
         (u'DataFrame',   DataFrame)
     ])
     
@@ -481,7 +475,7 @@ class _Chaperon(object):
         (datetime,    partial(_scalar_from_file, scalar_type=datetime)),
         (date,        partial(_scalar_from_file, scalar_type=date)),
         (FrozenDict,  _FrozenDict_from_file),
-        (list,        _list_from_file),
+        (FrozenList,  _FrozenList_from_file),
         (DataFrame,   _DataFrame_from_file)
     ])
     
@@ -495,7 +489,7 @@ class _Chaperon(object):
         (datetime,    partial(_scalar_from_line, scalar_type=datetime)),
         (date,        partial(_scalar_from_line, scalar_type=date)),
         (FrozenDict,  _FrozenDict_from_line),
-        (list,        _list_from_line)
+        (FrozenList,  _FrozenList_from_line)
     ])
     
     # Mapping of each supported type to its corresponding file-dumping function.
@@ -508,7 +502,7 @@ class _Chaperon(object):
         (datetime,    _scalar_to_file),
         (date,        _scalar_to_file),
         (FrozenDict,  _FrozenDict_to_file),
-        (list,        _list_to_file),
+        (FrozenList,  _FrozenList_to_file),
         (DataFrame,   _DataFrame_to_file)
     ])
     
@@ -522,7 +516,7 @@ class _Chaperon(object):
         (datetime,    _scalar_to_line),
         (date,        _scalar_to_line),
         (FrozenDict,  _FrozenDict_to_line),
-        (list,        _list_to_line)
+        (FrozenList,  _FrozenList_to_line)
     ])
     
     @staticmethod
@@ -548,7 +542,7 @@ class _Chaperon(object):
                 _validate_ductile(key)
                 _validate_ductile(value)
             
-        elif object_type == list:
+        elif object_type == FrozenList:
             
             for element in x:
                 _validate_ductile(element)
@@ -961,7 +955,7 @@ class gactfunc(object):
                 _validate_ductile(key)
                 _validate_ductile(value)
         
-        elif object_type == list:
+        elif object_type == FrozenList:
         
             for element in x:
                 _validate_ductile(element)
@@ -996,7 +990,7 @@ class gactfunc(object):
                 _validate_ductile(key)
                 _validate_ductile(value)
             
-        elif object_type == list:
+        elif object_type == FrozenList:
             
             try:
                 for element in x:

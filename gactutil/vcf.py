@@ -92,7 +92,7 @@ def filter_vcf_variants(infile, outfile, filters, no_short_circuit=False,
     Args:
         infile (unicode): Input VCF file.
         outfile (unicode): Output filtered VCF file.
-        filters (list): Filter specifications.
+        filters (FrozenList): Filter specifications.
         no_short_circuit (bool): Apply all filters to each site.
         no_filtered (bool): Output only sites passing all filters.
     """
