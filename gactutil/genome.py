@@ -21,11 +21,12 @@ from Bio import SeqIO
 from gactutil import TextReader
 from gactutil import TextWriter
 from gactutil import temporary_directory
-from gactutil import unidump
-from gactutil import uniload
-from gactutil import YAMLError
 from gactutil.gaction import gactfunc
 from gactutil.ncbi import check_efetch
+
+from gactutil.core.yaml import unidump
+from gactutil.core.yaml import uniload
+from gactutil.core.yaml import YAMLError
 
 ################################################################################
 

@@ -39,11 +39,11 @@ from gactutil import fsdecode
 from gactutil import fsencode
 from gactutil import TextReader
 from gactutil import TextWriter
-from gactutil import uniload_scalar
-from gactutil import unidump_scalar
-from gactutil import unidump
-from gactutil import uniload
-from gactutil import YAMLError
+from gactutil.core.yaml import unidump
+from gactutil.core.yaml import uniload
+from gactutil.core.yaml import unidump_scalar
+from gactutil.core.yaml import uniload_scalar
+from gactutil.core.yaml import YAMLError
 
 ################################################################################
 
