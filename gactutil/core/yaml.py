@@ -54,10 +54,6 @@ def construct_yaml_str(self, node):
 SafeDumper.add_representer(str, SafeRepresenter.represent_str)
 SafeDumper.add_representer(unicode, SafeRepresenter.represent_unicode)
 
-class SafeLoader(SafeLoader):
-    u"""YAML unicode-preferring loader."""
-    pass
-
 # Ensure SafeLoader constructs strings as unicode.
 SafeLoader.add_constructor(u'tag:yaml.org,2002:str', construct_yaml_str)
 

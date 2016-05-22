@@ -12,6 +12,8 @@ In addition to the Python standard library, this package depends on the followin
 - [PyVCF](https://github.com/jamescasbon/PyVCF)
 - [PyYAML](http://pyyaml.org/)
 
+VCF filters use the [PyVCF filter framework](https://pyvcf.readthedocs.io/en/latest/FILTERS.html), and Unicode CSV data are processed using classes based on the recipe in the [CSV module docs](https://docs.python.org/2/library/csv.html).
+
 ## Installation 
 
 To install this package, navigate to the package root directory and input the command:
