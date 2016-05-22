@@ -83,7 +83,7 @@ class FrozenDict(Mapping):
         self._data = temp_dict
     
     def __delattr__(self, key):
-        raise TypeError("{!r} object does not support attribute deletion".format(
+        raise TypeError("{} object does not support attribute deletion".format(
             self.__class__.__name__))
     
     def __eq__(self, other):
@@ -109,7 +109,7 @@ class FrozenDict(Mapping):
     
     def __setattr__(self, key, value):
         if hasattr(self, '_data'):
-            raise TypeError("{!r} object does not support attribute assignment".format(
+            raise TypeError("{} object does not support attribute assignment".format(
                 self.__class__.__name__))
         self.__dict__[key] = value
     
@@ -123,7 +123,7 @@ class FrozenDict(Mapping):
         return self
     
     def clear(self):
-        raise TypeError("{!r} object does not support the clear operation".format(
+        raise TypeError("{} object does not support the clear operation".format(
             self.__class__.__name__))
     
     def get(self, key):
@@ -142,15 +142,15 @@ class FrozenDict(Mapping):
         return self._data.itervalues()
     
     def pop(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support the pop operation".format(
+        raise TypeError("{} object does not support the pop operation".format(
             self.__class__.__name__))
     
     def popitem(self):
-        raise TypeError("{!r} object does not support the popitem operation".format(
+        raise TypeError("{} object does not support the popitem operation".format(
             self.__class__.__name__))
     
     def setdefault(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support the setdefault operation".format(
+        raise TypeError("{} object does not support the setdefault operation".format(
             self.__class__.__name__))
     
     def to_dict(self, **kwargs):
@@ -186,7 +186,7 @@ class FrozenDict(Mapping):
         return result
     
     def update(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support the update operation".format(
+        raise TypeError("{} object does not support the update operation".format(
             self.__class__.__name__))
     
     def viewitems(self):
@@ -267,7 +267,7 @@ class FrozenList(Sequence):
         self._data = tuple(temp_list)
     
     def __delattr__(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support attribute deletion".format(
+        raise TypeError("{} object does not support attribute deletion".format(
             self.__class__.__name__))
     
     def __eq__(self, other):
@@ -290,7 +290,7 @@ class FrozenList(Sequence):
     
     def __setattr__(self, index, value):
         if hasattr(self, '_data'):
-            raise TypeError("{!r} object does not support attribute assignment".format(
+            raise TypeError("{} object does not support attribute assignment".format(
                 self.__class__.__name__))
         self.__dict__[index] = value
     
@@ -301,14 +301,14 @@ class FrozenList(Sequence):
         return unicode(self._data)
     
     def append(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support the append operation".format(
+        raise TypeError("{} object does not support the append operation".format(
             self.__class__.__name__))
     
     def count(self, x):
         return self._data.count(x)
     
     def extend(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support extension".format(
+        raise TypeError("{} object does not support extension".format(
                 self.__class__.__name__))
     
     def index(self, x):
@@ -318,23 +318,23 @@ class FrozenList(Sequence):
             raise ValueError("{!r} is not in {}".format(x, self.__class__.__name__))
     
     def insert(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support item insertion".format(
+        raise TypeError("{} object does not support item insertion".format(
                 self.__class__.__name__))
     
     def pop(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support the pop operation".format(
+        raise TypeError("{} object does not support the pop operation".format(
                 self.__class__.__name__))
     
     def remove(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support item removal".format(
+        raise TypeError("{} object does not support item removal".format(
                 self.__class__.__name__))
     
     def reverse(self):
-        raise TypeError("{!r} object does not support in-place reversal".format(
+        raise TypeError("{} object does not support in-place reversal".format(
                 self.__class__.__name__))
     
     def sort(self, *args, **kwargs):
-        raise TypeError("{!r} object does not support in-place sorting".format(
+        raise TypeError("{} object does not support in-place sorting".format(
                 self.__class__.__name__))
     
     def to_list(self, **kwargs):
