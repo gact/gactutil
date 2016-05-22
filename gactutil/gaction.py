@@ -380,13 +380,15 @@ def _FrozenList_to_file(x, f):
                     line = _FrozenDict_to_line(element)
                 elif isinstance(element, FrozenList):
                     line = _FrozenList_to_line(element)
-                else:
+                elif isinstance(element, _Chaperon.scalar_types):
                     line = _scalar_to_line(element)
+                else:
+                    raise TypeError
                 
                 # Write line to output file.
                 writer.write( u'{}{}'.format(line.rstrip(u'\n'), u'\n') )
                 
-            except (IOError, ValueError):
+            except (IOError, TypeError, ValueError):
                 raise ValueError("failed to output FrozenList to file ~ {!r}".format(x))
 
 def _FrozenList_to_line(x):
@@ -450,6 +452,9 @@ class _Chaperon(object):
         (FrozenList,  _GFTS(    True,     True,     True)),
         (DataFrame,   _GFTS(    True,    False,     True))
     ])
+    
+    # Scalar gactfunc parameter/return types.
+    scalar_types = (NoneType, bool, unicode, float, int, datetime, date)
     
     # Mapping of each supported type name to its corresponding type object.
     _name2type = OrderedDict([
