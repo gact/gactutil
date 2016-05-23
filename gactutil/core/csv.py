@@ -36,8 +36,7 @@ class UTF8Reader(object):
         return self
     
     def __next__(self):
-        row = self._reader.next()
-        return [ unicode(cell, 'utf_8') for cell in row ]
+        return [ unicode(x, 'utf_8') for x in self._reader.next() ]
     
     def next(self):
         return self.__next__()
@@ -53,7 +52,8 @@ class UTF8Writer(object):
         self._writer = csv.writer(csvfile, dialect=dialect, **kwds)
 
     def writerow(self, row):
-        self._writer.writerow( [ cell.encode('utf_8') for cell in row] )
+        self._writer.writerow( [ x.encode('utf_8')
+            if isinstance(x, unicode) else str(x) for x in row ] )
 
     def writerows(self, rows):
         for row in rows:
