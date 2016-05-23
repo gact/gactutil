@@ -12,6 +12,18 @@ import os
 
 ################################################################################
 
+class csvtext(csv.Dialect):
+    """Python CSV dialect for CSV text data."""
+    delimiter = ','
+    quotechar = '"'
+    doublequote = True
+    skipinitialspace = True
+    lineterminator = os.linesep
+    quoting = csv.QUOTE_MINIMAL
+csv.register_dialect('csvtext', csvtext)
+
+################################################################################
+
 def utf8_encoder(csv_data):
     """Generator function to encode bytestring as UTF-8.
     
@@ -28,7 +40,7 @@ class UTF8Reader(object):
     Available: https://docs.python.org/2/library/csv.html [Accessed: May 2016]
     """
     
-    def __init__(self, csvfile, dialect=csv.excel, **kwds):
+    def __init__(self, csvfile, dialect=csvtext, **kwds):
         self._reader = csv.reader(utf8_encoder(csvfile),
             dialect=dialect, **kwds)
     
@@ -48,7 +60,7 @@ class UTF8Writer(object):
     Available: https://docs.python.org/2/library/csv.html [Accessed: May 2016]
     """
 
-    def __init__(self, csvfile, dialect=csv.excel, **kwds):
+    def __init__(self, csvfile, dialect=csvtext, **kwds):
         self._writer = csv.writer(csvfile, dialect=dialect, **kwds)
 
     def writerow(self, row):
