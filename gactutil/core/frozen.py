@@ -831,6 +831,10 @@ class FrozenRecord(FrozenTable):
         
         return item
     
+    def __iter__(self):
+        for x in self._data[0]:
+            yield x
+    
     def __repr__(self):
         if len(self._data) == 0:
             return 'FrozenRecord()'
@@ -838,6 +842,10 @@ class FrozenRecord(FrozenTable):
         fields = [ '{}={}'.format(fieldname, repr(value))
             for fieldname, value in zip(fieldnames, self._data[0]) ]
         return 'FrozenRecord({})'.format(', '.join(fields))
+    
+    def __reversed__(self):
+        for x in reversed(self._data[0]):
+            yield x
     
     def to_dict(self):
         u"""Return FrozenRecord as a mutable dict."""
