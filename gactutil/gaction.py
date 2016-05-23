@@ -410,6 +410,26 @@ def _FrozenTable_to_line(x):
     d = FrozenDict( record.to_dict() )
     return _FrozenDict_to_line(d)
 
+def _long_from_file(f):
+    u"""Get long integer from file."""
+    with TextReader(f) as fh:
+        s = fh.read()
+    return _long_from_line(s)
+
+def _long_from_line(s):
+    u"""Get long integer from single-line string."""
+    
+    s = fsdecode(s)
+    
+    x = uniload_scalar(s)
+    
+    if type(x) == int:
+        x = long(x)
+    elif type(x) != long:
+        raise ValueError("failed to convert string to valid long ~ {!r}".format(s))
+    
+    return x
+
 def _scalar_from_file(f, scalar_type=None):
     u"""Get scalar from file."""
     with TextReader(f) as fh:
@@ -452,6 +472,7 @@ class _Chaperon(object):
         (unicode,     _GFTS(   False,     True,     True)),
         (float,       _GFTS(   False,     True,     True)),
         (int,         _GFTS(   False,     True,     True)),
+        (long,        _GFTS(   False,     True,     True)),
         (datetime,    _GFTS(   False,     True,     True)),
         (date,        _GFTS(   False,     True,     True)),
         (FrozenDict,  _GFTS(    True,     True,     True)),
@@ -460,7 +481,7 @@ class _Chaperon(object):
     ])
     
     # Scalar gactfunc parameter/return types.
-    scalar_types = (NoneType, bool, unicode, float, int, datetime, date)
+    scalar_types = (NoneType, bool, unicode, float, int, long, datetime, date)
     
     # Mapping of each supported type name to its corresponding type object.
     _name2type = OrderedDict([
@@ -469,6 +490,7 @@ class _Chaperon(object):
         (u'unicode',     unicode),
         (u'float',       float),
         (u'int',         int),
+        (u'long',        long),
         (u'datetime',    datetime),
         (u'date',        date),
         (u'FrozenDict',  FrozenDict),
@@ -483,6 +505,7 @@ class _Chaperon(object):
         (unicode,     partial(_scalar_from_file, scalar_type=unicode)),
         (float,       partial(_scalar_from_file, scalar_type=float)),
         (int,         partial(_scalar_from_file, scalar_type=int)),
+        (long,        _long_from_file),
         (datetime,    partial(_scalar_from_file, scalar_type=datetime)),
         (date,        partial(_scalar_from_file, scalar_type=date)),
         (FrozenDict,  _FrozenDict_from_file),
@@ -497,6 +520,7 @@ class _Chaperon(object):
         (unicode,     partial(_scalar_from_line, scalar_type=unicode)),
         (float,       partial(_scalar_from_line, scalar_type=float)),
         (int,         partial(_scalar_from_line, scalar_type=int)),
+        (long,        _long_from_line),
         (datetime,    partial(_scalar_from_line, scalar_type=datetime)),
         (date,        partial(_scalar_from_line, scalar_type=date)),
         (FrozenDict,  _FrozenDict_from_line),
@@ -511,6 +535,7 @@ class _Chaperon(object):
         (unicode,     _scalar_to_file),
         (float,       _scalar_to_file),
         (int,         _scalar_to_file),
+        (long,        _scalar_to_file),
         (datetime,    _scalar_to_file),
         (date,        _scalar_to_file),
         (FrozenDict,  _FrozenDict_to_file),
@@ -525,6 +550,7 @@ class _Chaperon(object):
         (unicode,     _scalar_to_line),
         (float,       _scalar_to_line),
         (int,         _scalar_to_line),
+        (long,        _scalar_to_line),
         (datetime,    _scalar_to_line),
         (date,        _scalar_to_line),
         (FrozenDict,  _FrozenDict_to_line),
