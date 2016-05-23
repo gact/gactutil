@@ -21,16 +21,12 @@ from inspect import getmembers
 from inspect import getsource
 from inspect import isfunction
 from inspect import stack
-from io import BytesIO
 import os
-from pandas import DataFrame
-from pandas import read_csv
 import pickle
 from pkg_resources import resource_filename
 import re
 import sys
 from textwrap import dedent
-from types import IntType
 from types import NoneType
 
 from gactutil import _read_about
@@ -39,8 +35,12 @@ from gactutil import fsdecode
 from gactutil import fsencode
 from gactutil import TextReader
 from gactutil import TextWriter
+from gactutil.core.csv import UTF8Reader
+from gactutil.core.csv import UTF8Writer
 from gactutil.core.frozen import FrozenDict
 from gactutil.core.frozen import FrozenList
+from gactutil.core.frozen import FrozenRecord
+from gactutil.core.frozen import FrozenTable
 from gactutil.core.yaml import unidump
 from gactutil.core.yaml import uniload
 from gactutil.core.yaml import unidump_scalar
@@ -85,15 +85,6 @@ _GFTS = namedtuple('GFTS', [
 ])
 
 _info = {
-
-    # True values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
-    u'true_values': (u'yes', u'Yes', u'YES', u'true', u'True', u'TRUE', u'on', u'On', u'ON'),
-    
-    # False values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
-    u'false_values': (u'no', u'No', u'NO', u'false', u'False', u'FALSE', u'off', u'Off', u'OFF'),
-    
-    # Null values from PyYAML-3.11 <http://pyyaml.org/browser/pyyaml> [Accessed: 5 Apr 2016].
-    u'na_values': (u'null', u'Null', u'NULL'),
     
     u'reserved_params': frozenset([
         u'help',              # argparse help
@@ -227,27 +218,42 @@ _info = {
 
 ################################################################################
 
-def _DataFrame_from_file(f):
-    u"""Get Pandas DataFrame from file."""
+def _FrozenTable_from_file(f):
+    u"""Get FrozenTable from file."""
     
-    try:
-        with TextReader(f) as reader:
-            x = read_csv(reader, sep=',', header=0, mangle_dupe_cols=False,
-                skipinitialspace=True, true_values=_info[u'true_values'],
-                false_values=_info[u'false_values'], keep_default_na=False,
-                na_values=_info[u'na_values'])
-    except (IOError, OSError):
-        raise RuntimeError("failed to get DataFrame from file ~ {!r}".format(f))
+    with TextReader(f) as fh:
+        
+        reader = UTF8Reader(fh)
+        fieldnames = ()
+        data = list()
+        
+        for r, row in enumerate(reader):
+            if r > 0:
+                data.append([ uniload_scalar(x) for x in row ])
+            else:
+                fieldnames = row # list of unicode strings
     
-    return x
+    return FrozenTable(data, fieldnames)
 
-def _DataFrame_to_file(x, f):
-    u"""Output Pandas DataFrame to file."""
-    try:
-        with TextWriter(f) as writer:
-            x.to_csv(writer, sep=',', na_rep=_info[u'na_values'][0], index=False)
-    except (IOError, OSError):
-        raise ValueError("failed to output DataFrame to file ~ {!r}".format(x))
+def _FrozenTable_from_line(s):
+    u"""Get FrozenTable from single-line string."""
+    d = _FrozenDict_from_line(s)
+    record = FrozenRecord.from_dict(d)
+    return record.to_FrozenTable()
+    
+def _FrozenTable_to_file(x, f):
+    u"""Output FrozenTable to file."""
+    with TextWriter(f) as fh:
+        writer = UTF8Writer(fh)
+        writer.writerow( x.fieldnames )
+        for row in x.to_list():
+            writer.writerow([ unidump_scalar(x) for x in row ])
+
+def _FrozenTable_to_line(x):
+    u"""Convert FrozenTable to a single-line unicode string."""
+    record = x.to_FrozenRecord()
+    d = FrozenDict( record.to_dict() )
+    return _FrozenDict_to_line(d)
 
 def _FrozenDict_from_file(f):
     u"""Get FrozenDict from file."""
@@ -450,7 +456,7 @@ class _Chaperon(object):
         (date,        _GFTS(   False,     True,     True)),
         (FrozenDict,  _GFTS(    True,     True,     True)),
         (FrozenList,  _GFTS(    True,     True,     True)),
-        (DataFrame,   _GFTS(    True,    False,     True))
+        (FrozenTable, _GFTS(    True,    False,     True))
     ])
     
     # Scalar gactfunc parameter/return types.
@@ -467,7 +473,7 @@ class _Chaperon(object):
         (u'date',        date),
         (u'FrozenDict',  FrozenDict),
         (u'FrozenList',  FrozenList),
-        (u'DataFrame',   DataFrame)
+        (u'FrozenTable', FrozenTable)
     ])
     
     # Mapping of each supported type to its corresponding file-loading function.
@@ -481,7 +487,7 @@ class _Chaperon(object):
         (date,        partial(_scalar_from_file, scalar_type=date)),
         (FrozenDict,  _FrozenDict_from_file),
         (FrozenList,  _FrozenList_from_file),
-        (DataFrame,   _DataFrame_from_file)
+        (FrozenTable, _FrozenTable_from_file)
     ])
     
     # Mapping of each supported type to its corresponding line-loading function.
@@ -494,7 +500,8 @@ class _Chaperon(object):
         (datetime,    partial(_scalar_from_line, scalar_type=datetime)),
         (date,        partial(_scalar_from_line, scalar_type=date)),
         (FrozenDict,  _FrozenDict_from_line),
-        (FrozenList,  _FrozenList_from_line)
+        (FrozenList,  _FrozenList_from_line),
+        (FrozenTable, _FrozenTable_from_line)
     ])
     
     # Mapping of each supported type to its corresponding file-dumping function.
@@ -508,7 +515,7 @@ class _Chaperon(object):
         (date,        _scalar_to_file),
         (FrozenDict,  _FrozenDict_to_file),
         (FrozenList,  _FrozenList_to_file),
-        (DataFrame,   _DataFrame_to_file)
+        (FrozenTable, _FrozenTable_to_file)
     ])
     
     # Mapping of each supported type to its corresponding line-dumping function.
@@ -521,7 +528,8 @@ class _Chaperon(object):
         (datetime,    _scalar_to_line),
         (date,        _scalar_to_line),
         (FrozenDict,  _FrozenDict_to_line),
-        (FrozenList,  _FrozenList_to_line)
+        (FrozenList,  _FrozenList_to_line),
+        (FrozenTable, _FrozenTable_to_line)
     ])
     
     @staticmethod
