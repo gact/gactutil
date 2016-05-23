@@ -12,7 +12,9 @@ In addition to the Python standard library, this package depends on the followin
 - [PyVCF](https://github.com/jamescasbon/PyVCF)
 - [PyYAML](http://pyyaml.org/)
 
-VCF filters use the [PyVCF filter framework](https://pyvcf.readthedocs.io/en/latest/FILTERS.html), and Unicode CSV data are processed using classes based on the recipe in the [CSV module docs](https://docs.python.org/2/library/csv.html).
+In particular, the YAML submodule of this package contains slightly modified versions of several classes from Kirill Simonov's [PyYAML package](http://pyyaml.org), and the PyYAML software license is included in the YAML submodule file.
+
+Also, VCF filters use the [PyVCF filter framework](https://pyvcf.readthedocs.io/en/latest/FILTERS.html), and Unicode CSV data are processed using classes based on the recipe in the [CSV module docs](https://docs.python.org/2/library/csv.html).
 
 ## Installation 
 

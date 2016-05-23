@@ -218,43 +218,6 @@ _info = {
 
 ################################################################################
 
-def _FrozenTable_from_file(f):
-    u"""Get FrozenTable from file."""
-    
-    with TextReader(f) as fh:
-        
-        reader = UTF8Reader(fh)
-        fieldnames = ()
-        data = list()
-        
-        for r, row in enumerate(reader):
-            if r > 0:
-                data.append([ uniload_scalar(x) for x in row ])
-            else:
-                fieldnames = row # list of unicode strings
-    
-    return FrozenTable(data, fieldnames)
-
-def _FrozenTable_from_line(s):
-    u"""Get FrozenTable from single-line string."""
-    d = _FrozenDict_from_line(s)
-    record = FrozenRecord.from_dict(d)
-    return record.to_FrozenTable()
-    
-def _FrozenTable_to_file(x, f):
-    u"""Output FrozenTable to file."""
-    with TextWriter(f) as fh:
-        writer = UTF8Writer(fh)
-        writer.writerow( x.fieldnames )
-        for row in x.to_list():
-            writer.writerow([ unidump_scalar(x) for x in row ])
-
-def _FrozenTable_to_line(x):
-    u"""Convert FrozenTable to a single-line unicode string."""
-    record = x.to_FrozenRecord()
-    d = FrozenDict( record.to_dict() )
-    return _FrozenDict_to_line(d)
-
 def _FrozenDict_from_file(f):
     u"""Get FrozenDict from file."""
     
@@ -409,6 +372,43 @@ def _FrozenList_to_line(x):
         raise ValueError("failed to convert FrozenList to single-line unicode string ~ {!r}".format(x))
     
     return s
+
+def _FrozenTable_from_file(f):
+    u"""Get FrozenTable from file."""
+    
+    with TextReader(f) as fh:
+        
+        reader = UTF8Reader(fh)
+        fieldnames = ()
+        data = list()
+        
+        for r, row in enumerate(reader):
+            if r > 0:
+                data.append([ uniload_scalar(x) for x in row ])
+            else:
+                fieldnames = row # list of unicode strings
+    
+    return FrozenTable(data, fieldnames)
+
+def _FrozenTable_from_line(s):
+    u"""Get FrozenTable from single-line string."""
+    d = _FrozenDict_from_line(s)
+    record = FrozenRecord.from_dict(d)
+    return record.to_FrozenTable()
+    
+def _FrozenTable_to_file(x, f):
+    u"""Output FrozenTable to file."""
+    with TextWriter(f) as fh:
+        writer = UTF8Writer(fh)
+        writer.writerow( x.fieldnames )
+        for row in x.to_list():
+            writer.writerow([ unidump_scalar(x) for x in row ])
+
+def _FrozenTable_to_line(x):
+    u"""Convert FrozenTable to a single-line unicode string."""
+    record = x.to_FrozenRecord()
+    d = FrozenDict( record.to_dict() )
+    return _FrozenDict_to_line(d)
 
 def _scalar_from_file(f, scalar_type=None):
     u"""Get scalar from file."""
