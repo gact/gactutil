@@ -385,7 +385,8 @@ class FrozenTable(object):
     # Supported FrozenTable cell value types. Cell values must be representable
     # in a single cell of a comma-delimited table, so in addition to being one
     # of the listed types, cell values must not contain any unescaped newlines.
-    supported_types = (NoneType, bool, basestring, float, int, datetime, date)
+    supported_types = (NoneType, bool, basestring, float, int, long,
+        datetime, date)
     
     @property
     def fieldcount(self):
