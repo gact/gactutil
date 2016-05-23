@@ -218,6 +218,26 @@ _info = {
 
 ################################################################################
 
+def _float_from_file(f):
+    u"""Get float from file."""
+    with TextReader(f) as fh:
+        s = fh.read()
+    return _float_from_line(s)
+
+def _float_from_line(s):
+    u"""Get float from single-line string."""
+    
+    s = fsdecode(s)
+    
+    x = uniload_scalar(s)
+    
+    if type(x) == int:
+        x = float(x)
+    elif type(x) != float:
+        raise ValueError("failed to convert string to valid float ~ {!r}".format(s))
+    
+    return x
+
 def _FrozenDict_from_file(f):
     u"""Get FrozenDict from file."""
     
@@ -503,7 +523,7 @@ class _Chaperon(object):
         (NoneType,    partial(_scalar_from_file, scalar_type=NoneType)),
         (bool,        partial(_scalar_from_file, scalar_type=bool)),
         (unicode,     partial(_scalar_from_file, scalar_type=unicode)),
-        (float,       partial(_scalar_from_file, scalar_type=float)),
+        (float,       _float_from_file),
         (int,         partial(_scalar_from_file, scalar_type=int)),
         (long,        _long_from_file),
         (datetime,    partial(_scalar_from_file, scalar_type=datetime)),
@@ -518,7 +538,7 @@ class _Chaperon(object):
         (NoneType,    partial(_scalar_from_line, scalar_type=NoneType)),
         (bool,        partial(_scalar_from_line, scalar_type=bool)),
         (unicode,     partial(_scalar_from_line, scalar_type=unicode)),
-        (float,       partial(_scalar_from_line, scalar_type=float)),
+        (float,       _float_from_line),
         (int,         partial(_scalar_from_line, scalar_type=int)),
         (long,        _long_from_line),
         (datetime,    partial(_scalar_from_line, scalar_type=datetime)),
