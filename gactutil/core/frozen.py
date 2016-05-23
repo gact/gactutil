@@ -835,6 +835,9 @@ class FrozenRecord(FrozenTable):
         for x in self._data[0]:
             yield x
     
+    def __len__(self):
+        return self._data[0].__len__()
+    
     def __repr__(self):
         if len(self._data) == 0:
             return 'FrozenRecord()'
