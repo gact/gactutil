@@ -22,6 +22,16 @@ class csvtext(csv.Dialect):
     quoting = csv.QUOTE_MINIMAL
 csv.register_dialect('csvtext', csvtext)
 
+class tsvtext(csv.Dialect):
+    """Python CSV dialect for TSV text data."""
+    delimiter = '\t'
+    quotechar = '"'
+    doublequote = True
+    skipinitialspace = True
+    lineterminator = os.linesep
+    quoting = csv.QUOTE_MINIMAL
+csv.register_dialect('tsvtext', tsvtext)
+
 ################################################################################
 
 def utf8_encoder(csv_data):
