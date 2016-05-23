@@ -422,6 +422,37 @@ class FrozenTable(object):
         
         return index
     
+    @classmethod
+    def from_dict(cls, data):
+        u"""Get FrozenTable from dict."""
+        
+        if not isinstance(data, Mapping):
+            raise TypeError("data not of mapping type ~ {!r}".format(data))
+        
+        fieldnames = sorted( data.keys() )
+        
+        col_length = None
+        
+        for x in data.values():
+            
+            try:
+                assert isinstance(x, Sequence)
+                assert not isinstance(x, basestring)
+                
+                row_count = len(x)
+                
+            except (AssertionError, TypeError):
+                raise TypeError("dict data column must be a sized sequence, not {!r}".format(
+                    type(x).__name__))
+            
+            if col_length is None:
+                col_length = row_count
+            elif row_count != col_length:
+                raise ValueError("dict data columns have inconsistent lengths")
+        
+        return FrozenTable(data=[ x for x in izip(*[ data[k]
+            for k in fieldnames ]) ], fieldnames=fieldnames)
+    
     def __init__(self, data=(), fieldnames=()):
         
         for fieldname in fieldnames:
@@ -494,7 +525,7 @@ class FrozenTable(object):
                     raise ValueError("{} is unrepresentable - contains multiline string value ~ {!r}".format(
                         self.__class__.__name__, x))
                 elif not isinstance(x, FrozenTable.supported_types):
-                    raise TypeError("{} is invalid - contains value of unsupported type {!r}".format(
+                    raise TypeError("{} is invalid - contains value of unknown or non-scalar type {!r}".format(
                         self.__class__.__name__, type(x).__name__))
         
         self._data = tuple(table)
@@ -597,7 +628,7 @@ class FrozenTable(object):
             
             records.append(record)
         
-        return 'FrozenTable({})'.format(', '.join(records))
+        return 'FrozenTable( {} )'.format(', '.join(records))
     
     def __reversed__(self):
         for row in reversed(self._data):
