@@ -7,10 +7,14 @@ from collections import Iterable
 from collections import Mapping
 from collections import Sequence
 from collections import Set
+import csv
 from datetime import date
 from datetime import datetime
 from itertools import izip
+from StringIO import StringIO
 from types import NoneType
+
+from gactutil.core.csv import csvtext
 
 ################################################################################
 
@@ -610,20 +614,22 @@ class FrozenTable(object):
                 self.__class__.__name__))
     
     def __str__(self):
-        return self.__unicode__().encode('utf_8')
+        
+        sh = StringIO()
+        writer = csv.writer(sh, dialect=csvtext)
+        
+        for row in (self._field_list,) + self._data:
+            row = [ x.encode('utf_8') if isinstance(x, unicode)
+                else str(x) for x in row ]
+            writer.writerow(row)
+        
+        result = sh.getvalue()
+        sh.close()
+        
+        return result
     
     def __unicode__(self):
-        
-        if len(self._data) == 0:
-            return u''
-        
-        lines = [ u', '.join(self._field_list) ]
-        
-        for row in self._data:
-            lines.append(u', '.join([ unicode(x, 'utf_8')
-                if isinstance(x, str) else unicode(x) for x in row ]))
-        
-        return u'{}\n'.format(u'\n'.join(lines))
+        return self.__str__().decode('utf_8')
     
     def _resolve_field_index(self, key):
         u"""Resolve field index from the given index or fieldname."""
