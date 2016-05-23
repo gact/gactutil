@@ -786,6 +786,23 @@ class FrozenRecord(FrozenTable):
     its public interface.
     """
     
+    @classmethod
+    def from_dict(cls, data):
+        u"""Get FrozenRecord from dict."""
+        
+        if not isinstance(data, Mapping):
+            raise TypeError("data not of mapping type ~ {!r}".format(data))
+        
+        fieldnames = sorted( data.keys() )
+        
+        for x in data.values():
+            if not isinstance(x, FrozenTable.supported_types):
+                raise TypeError("dict data value is of unknown or non-scalar type {!r}".format(
+                    type(x).__name__))
+        
+        return FrozenRecord(data=[ data[k] for k in fieldnames ],
+            fieldnames=fieldnames)
+    
     def __init__(self, data=(), fieldnames=()):
         
         super(FrozenRecord, self).__init__(data, fieldnames)
