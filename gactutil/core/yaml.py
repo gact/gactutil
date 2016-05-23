@@ -152,20 +152,26 @@ def uniload(stream):
 def unidump_scalar(data, stream=None):
     u"""Dump scalar to YAML unicode stream."""
     
-    try:
-        method = _scalar_representer_methods[type(data)]
-    except KeyError:
-        raise TypeError("cannot dump data of type {!r}".format(type(data).__name__))
-    
-    if is_multiline_string(data):
-        raise ValueError("cannot dump multiline string ~ {!r}".format(data))
-    
-    node = method(_scalar_representer, data)
+    if data is not None:
+        
+        try:
+            method = _scalar_representer_methods[type(data)]
+        except KeyError:
+            raise TypeError("cannot dump data of type {!r}".format(type(data).__name__))
+        
+        if is_multiline_string(data):
+            raise ValueError("cannot dump multiline string ~ {!r}".format(data))
+        
+        node = method(_scalar_representer, data)
+        value = node.value
+        
+    else:
+        value = u'' # implicit null
     
     if stream is not None:
-        stream.write(u'{}{}'.format(node.value.rstrip(u'\n'), u'\n'))
+        stream.write(u'{}{}'.format(value.rstrip(u'\n'), u'\n'))
     else:
-        return node.value
+        return value
 
 def uniload_scalar(stream):
     u"""Load scalar from YAML unicode stream."""
