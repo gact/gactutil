@@ -770,7 +770,10 @@ class FrozenTable(object):
     def to_dict(self):
         u"""Return FrozenTable as a mutable dict."""
         return dict( izip(self._field_list, izip(*self._data)) )
-        
+    
+    def to_FrozenRecord(self):
+        return FrozenRecord(data=self._data, fieldnames=self._field_list)
+    
     def to_list(self, flatten=False):
         u"""Return FrozenTable as a mutable list."""
         if flatten:
@@ -854,6 +857,9 @@ class FrozenRecord(FrozenTable):
         u"""Return FrozenRecord as a mutable dict."""
         return dict( izip(self._field_list, self._data[0]) )
         
+    def to_FrozenTable(self):
+        return FrozenTable(data=self._data, fieldnames=self._field_list)
+    
     def to_list(self):
         u"""Return FrozenRecord as a mutable list."""
         return list(self._data[0])
