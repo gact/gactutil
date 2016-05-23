@@ -579,6 +579,9 @@ def uniload_scalar(stream):
             raise TypeError("cannot load scalar from input of type {!r}".format(
                 type(stream).__name__))
     
+    # Ensure strings are unicode.
+    lines = [ line.decode('utf_8') for line in lines ]
+    
     # Strip YAML comments and flanking whitespace from each line.
     lines = [ ystrip(line) for line in lines ]
     
