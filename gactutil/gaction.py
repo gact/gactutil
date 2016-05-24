@@ -8,7 +8,6 @@ from collections import deque
 from collections import Mapping
 from collections import Iterable
 from collections import MutableMapping
-from collections import namedtuple
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import date
@@ -16,11 +15,7 @@ from datetime import datetime
 from functools import partial
 from imp import load_source
 from importlib import import_module
-from inspect import getargspec
-from inspect import getmembers
-from inspect import getsource
-from inspect import isfunction
-from inspect import stack
+import inspect
 import os
 import pickle
 from pkg_resources import resource_filename
@@ -76,13 +71,6 @@ class _GactfuncSpec(object):
             raise TypeError("{!r} object does not support attribute assignment".format(
                 self.__class__.__name__))
         self.__dict__[key] = value
-
-# Named tuple for specification of gactfunc parameter/return types.
-_GFTS = namedtuple('GFTS', [
-    'is_compound',    # Composite data type.
-    'is_ductile',     # Convertible to a single-line string, and vice versa.
-    'is_fileable'     # Can be loaded from and dumped to file.
-])
 
 _info = {
     
@@ -485,20 +473,8 @@ class _Chaperon(object):
     # both as Python function arguments and as command-line arguments, whether
     # loaded from a file or converted from a simple string. NB: types should be
     # checked in order (e.g. bool before int, datetime before date).
-    supported_types = OrderedDict([
-        #                   COMPOUND   DUCTILE  FILEABLE
-        (NoneType,    _GFTS(   False,     True,     True)),
-        (bool,        _GFTS(   False,     True,     True)),
-        (unicode,     _GFTS(   False,     True,     True)),
-        (float,       _GFTS(   False,     True,     True)),
-        (int,         _GFTS(   False,     True,     True)),
-        (long,        _GFTS(   False,     True,     True)),
-        (datetime,    _GFTS(   False,     True,     True)),
-        (date,        _GFTS(   False,     True,     True)),
-        (FrozenDict,  _GFTS(    True,     True,     True)),
-        (FrozenList,  _GFTS(    True,     True,     True)),
-        (FrozenTable, _GFTS(    True,    False,     True))
-    ])
+    supported_types = (NoneType, bool, unicode, float, int, long, datetime,
+        date, FrozenDict, FrozenList, FrozenTable)
     
     # Scalar gactfunc parameter/return types.
     scalar_types = (NoneType, bool, unicode, float, int, long, datetime, date)
@@ -584,31 +560,42 @@ class _Chaperon(object):
         
         object_type = type(x)
         
-        try:
-            ductile = _Chaperon.supported_types[object_type].is_ductile
-        except KeyError:
-            raise TypeError("unknown gactfunc parameter/return type ~ {!r}".format(
-                object_type.__name__))
-        
-        if object_type == unicode:
+        if object_type in _Chaperon.scalar_types:
             
-            if any( line_break in x for line_break in (u'\n', u'\r', u'\r\n') ):
-                raise ValueError("unicode string is not ductile ~ {!r}".format(x))
+            if object_type == unicode and any( line_break in x
+                for line_break in (u'\n', u'\r', u'\r\n') ):
+                raise ValueError("unicode string is not ductile:\n{!r}".format(x))
             
         elif object_type == FrozenDict:
             
-            for key, value in x.items():
-                _validate_ductile(key)
-                _validate_ductile(value)
+            try:
+                for key, value in x.items():
+                    _Chaperon._validate_ductile(key)
+                    _Chaperon._validate_ductile(value)
+            except ValueError:
+                raise ValueError("FrozenDict is not ductile:\n{!r}".format(x))
             
         elif object_type == FrozenList:
             
-            for element in x:
-                _validate_ductile(element)
+            try:
+                for element in x:
+                    _Chaperon._validate_ductile(element)
+            except ValueError:
+                raise ValueError("FrozenList is not ductile:\n{!r}".format(x))
             
-        elif not ductile:
-            raise TypeError("{} is not ductile ~ {!r}".format(
-                object_type.__name__, x))
+        elif object_type == FrozenTable:
+            
+            try:
+                assert len(x) == 1
+                for row in x:
+                    for element in row:
+                        _Chaperon._validate_ductile(element)
+            except (AssertionError, ValueError):
+                raise ValueError("FrozenTable is not ductile:\n{!r}".format(x))
+            
+        elif object_type not in _Chaperon.supported_types:
+            raise TypeError("unknown gactfunc parameter/return type: {!r}".format(
+                object_type.__name__))
     
     @classmethod
     def from_file(cls, filepath, object_type):
@@ -711,7 +698,7 @@ class gactfunc(object):
         func_name = function.__name__
         
         # Check gactfunc is indeed a function.
-        if not isfunction(function):
+        if not inspect.isfunction(function):
             return TypeError("object is not a function ~ {!r}".format(func_name))
         
         # Get function docstring.
@@ -972,7 +959,7 @@ class gactfunc(object):
         func_name = function.__name__
         
         # Check gactfunc is indeed a function.
-        if not isfunction(function):
+        if not inspect.isfunction(function):
             return TypeError("object is not a function ~ {!r}".format(func_name))
         
         # Try to match function name to expected gactfunc pattern.
@@ -989,78 +976,42 @@ class gactfunc(object):
         return commands
 
     @staticmethod
-    def _validate_param_type(x, expected_type=None):
-        u"""Validate parameter object type."""
+    def _validate_argument(x, param_type=None):
+        u"""Validate argument."""
         
-        object_type = type(x)
-        
-        if expected_type is not None:
-            
-            if not isinstance(expected_type, type):
-                raise TypeError("argument 'expected_type' is not a type object ~ {!r}".format(
-                    expected_type))
-            
-            if object_type != expected_type:
-                raise TypeError("parameter type ({}) differs from that expected ({})".format(
-                    object_type, type_name))
-        
-        if object_type == unicode:
-        
-            _validate_ductile(x)
-        
-        elif object_type == FrozenDict:
-        
-            for key, value in x.items():
-                _validate_ductile(key)
-                _validate_ductile(value)
-        
-        elif object_type == FrozenList:
-        
-            for element in x:
-                _validate_ductile(element)
-        
-        elif not _Chaperon.supported_types[object_type].is_ductile:
-            raise TypeError("{} is not a valid parameter object ~ {!r}".format(
-                object_type.__name__, x))
-        
-    @staticmethod
-    def _validate_return_type(x, expected_type=None):
-        u"""Validate return value type."""
-        
-        object_type = type(x)
-        
-        if expected_type is not None:
-            
-            if not isinstance(expected_type, type):
-                raise TypeError("argument 'expected_type' is not a type object ~ {!r}".format(
-                    expected_type))
-            
-            if object_type != expected_type:
-                raise TypeError("parameter type ({}) differs from that expected ({})".format(
-                    object_type, type_name))
-        
-        if object_type == unicode:
-            
-            _validate_ductile(x)
-            
-        elif object_type == FrozenDict:
-            
-            for key, value in x.items():
-                _validate_ductile(key)
-                _validate_ductile(value)
-            
-        elif object_type == FrozenList:
+        if param_type is not None and type(x) != param_type:
             
             try:
-                for element in x:
-                    _validate_ductile(element)
-            except (TypeError, ValueError):
-                for element in x:
-                    _validate_delimitable(element)
-            
-        elif object_type not in _Chaperon.supported_types:
-            raise TypeError("{} is not a valid return value object ~ {!r}".format(
-                object_type, x))
+                
+                if ( param_type == FrozenList and isinstance(x, Iterable) and
+                    not isinstance(x, basestring) ):
+                    x = FrozenList(x)
+                elif param_type == FrozenDict and isinstance(x, Mapping):
+                    x = FrozenDict(x)
+                elif param_type == float and isinstance(x, int):
+                    x = float(x)
+                elif param_type == long and isinstance(x, int):
+                    x = long(x)
+                else:
+                    raise TypeError
+                
+            except TypeError:
+                raise TypeError("argument type ({}) differs from that expected ({})".format(
+                    type(x).__name__, param_type.__name__))
+        
+        _Chaperon._validate_ductile(x)
+        
+        return x
+        
+    @staticmethod
+    def _validate_return_value(x, return_type=None):
+        u"""Validate return value."""
+        
+        if return_type is not None and type(x) != return_type:
+            raise TypeError("return value type ({}) differs from that expected ({})".format(
+                type(x).__name__, return_type.__name__))
+        
+        _Chaperon._validate_ductile(x)
         
     def __init__(self, function):
         u"""Init gactfunc wrapper from wrapped function."""
@@ -1075,7 +1026,7 @@ class gactfunc(object):
         self._data[u'commands'] = self._parse_function_name(function)
         
         # Get function argspec.
-        arg_spec = getargspec(function)
+        arg_spec = inspect.getargspec(function)
         
         # Check that there are no unenumerated arguments.
         if arg_spec.varargs is not None or arg_spec.keywords is not None:
@@ -1118,10 +1069,10 @@ class gactfunc(object):
         if u'Args' in doc_info:
             
             # Set gactfunc parameter info from parsed docstring.
-            self._data[u'param_spec'] = doc_info[u'Args']
+            param_spec = doc_info[u'Args']
             
             # Get set of documented parameters.
-            doc_param_set = set(self._data[u'param_spec'])
+            doc_param_set = set(param_spec)
             
             # Get set of parameters specified in function definition.
             spec_param_set = set(param_names)
@@ -1143,32 +1094,32 @@ class gactfunc(object):
                 
                 for param_name, default in spec_def_info.items():
                     
-                    self._data[u'param_spec'][param_name][u'default'] = default
-                    
                     # Skip unspecified defaults as we cannot validate them.
                     if default is None:
+                        param_spec[param_name][u'default'] = default
                         continue
                     
-                    # Get parameter type.
-                    type_name = self._data[u'param_spec'][param_name][u'type']
+                    # Get specified parameter type.
+                    param_type = param_spec[param_name][u'type']
                     
-                    # Check that the defined default value is of the
+                    # Ensure that the defined default value is of the
                     # type specified in the function documentation.
                     try:
-                        gactfunc._validate_param_type(default, type_name)
+                        default = gactfunc._validate_argument(default, param_type)
+                        param_spec[param_name][u'default'] = default
                     except (TypeError, ValueError):
                         raise TypeError("{} definition has default type mismatch for parameter {!r}".format(
                             func_name, param_name))
                     
                     # Skip undocumented defaults.
-                    if u'docstring_default' not in self._data[u'param_spec'][param_name]:
+                    if u'docstring_default' not in param_spec[param_name]:
                         continue
                     
                     # Get string representation of docstring default.
-                    docstring_default = self._data[u'param_spec'][param_name][u'docstring_default']
+                    docstring_default = param_spec[param_name][u'docstring_default']
                     
                     try: # Coerce documented default from string.
-                        coerced_default = _Chaperon._from_line[type_name](docstring_default)
+                        coerced_default = _Chaperon._from_line[param_type](docstring_default)
                     except (KeyError, TypeError, ValueError):
                         raise TypeError("{} docstring has default type mismatch for parameter {!r}".format(
                             func_name, param_name))
@@ -1183,14 +1134,16 @@ class gactfunc(object):
             if len(param_names) > 0:
                 raise ValueError("{} parameters defined but not documented ~ {!r}".format(
                     func_name, param_names))
-            self._data[u'param_spec'] = None
+            param_spec = None
+            
+        self._data[u'param_spec'] = param_spec
             
         # Init input/output parameter set info.
         self._data[u'iop'] = { channel: None for channel in _info[u'iop'] }
         
         # Check if function contains explicit return.
         explicit_return = any( token == 'return' for token in
-            reversed( _tokenise_source( getsource(function) ) ) )
+            reversed( _tokenise_source( inspect.getsource(function) ) ) )
         
         # If gactfunc has explicit return, check that it is
         # documented, then set return spec and IO pattern.
@@ -1262,7 +1215,7 @@ class gactfunc(object):
                     param_type = self._data[u'param_spec'][param_name][u'type']
                     if param_type != unicode:
                         raise TypeError("{} {} parameter must be of type unicode, not {!r} ~ {!r}".format(
-                            func_name, channel, type_name, param_name))
+                            func_name, channel, param_type.__name__, param_name))
                     
                 if iop == u'indexed':
                     
@@ -1299,7 +1252,33 @@ class gactfunc(object):
 
     def __call__(self, *args, **kwargs):
         u"""Call gactfunc wrapper."""
-        return self.function(*args, **kwargs)
+        
+        try: # Check if called by gactfunc.
+            grandparent = (inspect.stack())[2][0]
+            called_by_gactfunc = isinstance(grandparent.f_locals['self'], gactfunc)
+        except (IndexError, KeyError):
+            called_by_gactfunc = False
+        
+        # Bind arguments to gactfunc parameters.
+        kwargs = inspect.getcallargs(self.function, *args, **kwargs)
+        
+        if not called_by_gactfunc:
+            
+            param_spec = self._data[u'param_spec']
+            
+            for param_name in param_spec:
+                
+                param_type = param_spec[param_name]['type']
+                
+                arg_value = kwargs[param_name]
+                
+                if ( 'default' not in param_spec[param_name] or
+                    param_spec[param_name]['default'] is not None or
+                    arg_value is not None ):
+                    kwargs[param_name] = self._validate_argument(arg_value,
+                        param_type=param_type)
+        
+        return self.function(**kwargs)
 
     def _update_ap_spec(self):
         
@@ -1436,7 +1415,7 @@ class gactfunc(object):
             elif param_name in _info[u'short_params']:
                 
                 # Check that this is not a compound type.
-                if _Chaperon.supported_types[ param_info[u'type'] ].is_compound:
+                if param_info[u'type'] not in _Chaperon.scalar_types:
                     raise TypeError("cannot create short-form parameter {!r} of type {!r}".format(
                         param_name, param_info[u'type'].__name__))
                 
@@ -1476,7 +1455,7 @@ class gactfunc(object):
             # ..otherwise if parameter is of a compound type, create up to two
             # (mutually exclusive) parameters: one to accept argument as string
             # (if ductile), the other to load it from a file (if fileable)..
-            elif _Chaperon.supported_types[ param_info[u'type'] ].is_compound:
+            elif param_info[u'type'] not in _Chaperon.scalar_types:
                 
                 # Compound parameters are treated as optionals.
                 # If parameter was positional, set as required.
@@ -1490,10 +1469,9 @@ class gactfunc(object):
                 # Set compound parameter title.
                 param_info[u'title'] = u'{} argument'.format( param_name.replace(u'_', u'-') )
                 
-                # If parameter is of a ductile type, set flag for
-                # it to be passed directly on the command line.
-                if _Chaperon.supported_types[ param_info[u'type'] ].is_ductile:
-                    param_info[u'flag'] = u'--{}'.format( param_name.replace(u'_', u'-') )
+                # Set flag for parameter to be passed directly on the command line.
+                # NB: this flag can only be used for an argument that fits in a single line.
+                param_info[u'flag'] = u'--{}'.format( param_name.replace(u'_', u'-') )
                 
                 # Set file parameter name.
                 param_info[u'file_dest'] = u'{}_file'.format(param_name)
@@ -1657,7 +1635,7 @@ class _GactfuncCollection(MutableMapping):
         """
         
         # Validate caller.
-        caller_file, caller_func = [ (stack()[1])[i] for i in (1, 3) ]
+        caller_file, caller_func = [ (inspect.stack()[1])[i] for i in (1, 3) ]
         if caller_file != 'setup.py' or caller_func != '<module>':
             raise RuntimeError("{} can only be populated during GACTutil package setup".format(
                 self.__class__.__name__))
@@ -1688,7 +1666,7 @@ class _GactfuncCollection(MutableMapping):
             module = load_source(mod_name, mod_path)
             
             # Check members of module for gactfunc instances.
-            for member_name, member in getmembers(module):
+            for member_name, member in inspect.getmembers(module):
                 
                 # If this is a gactfunc, add its spec to gactfunc collection.
                 if isinstance(member, gactfunc):
@@ -1816,40 +1794,29 @@ class _GactfuncCollection(MutableMapping):
                             
                         elif param_info[u'group'] == u'compound':
                             
-                            # If compound object parameter is of a parameter type,
-                            # prepare to read from command line or load from file..
-                            if _Chaperon.supported_types[ param_info[u'type'] ].is_ductile:
-                                
-                                # Set info for pair of alternative parameters.
-                                item_help = 'Set {} from string.'.format(type_name)
-                                file_help = 'Load {} from file.'.format(type_name)
-                                
-                                # Add (mutually exclusive) pair of alternative parameters.
-                                ag = cap.add_argument_group(
-                                    title       = param_info[u'title'],
-                                    description = param_info[u'description'])
-                                mxg = ag.add_mutually_exclusive_group(
-                                    required    = param_info[u'required'])
-                                mxg.add_argument(param_info[u'flag'],
-                                    dest        = param_info[u'dest'],
-                                    metavar     = 'STR',
-                                    default     = param_info[u'default'],
-                                    help        = item_help)
-                                mxg.add_argument(param_info[u'file_flag'],
-                                    dest        = param_info[u'file_dest'],
-                                    metavar     = 'PATH',
-                                    help        = file_help)
-                                
-                            # ..otherwise prepare to load it from file.
-                            else:
-                                
-                                cap.add_argument(param_info[u'file_flag'],
-                                    dest     = param_info[u'file_dest'],
-                                    metavar  = 'PATH',
-                                    default  = param_info[u'default'],
-                                    required = param_info[u'required'],
-                                    help     = param_info[u'description'])
-                                
+                            # Prepare to read compound object from
+                            # command line or load from file.
+                            
+                            # Set info for pair of alternative parameters.
+                            item_help = 'Set {} from string.'.format(type_name)
+                            file_help = 'Load {} from file.'.format(type_name)
+                            
+                            # Add (mutually exclusive) pair of alternative parameters.
+                            ag = cap.add_argument_group(
+                                title       = param_info[u'title'],
+                                description = param_info[u'description'])
+                            mxg = ag.add_mutually_exclusive_group(
+                                required    = param_info[u'required'])
+                            mxg.add_argument(param_info[u'flag'],
+                                dest        = param_info[u'dest'],
+                                metavar     = 'STR',
+                                default     = param_info[u'default'],
+                                help        = item_help)
+                            mxg.add_argument(param_info[u'file_flag'],
+                                dest        = param_info[u'file_dest'],
+                                metavar     = 'PATH',
+                                help        = file_help)
+                            
                         elif param_info[u'group'] == u'IO':
                             
                             cap.add_argument(param_info[u'flag'],
