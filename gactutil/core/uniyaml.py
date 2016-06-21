@@ -1,6 +1,6 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-u"""GACTutil YAML utilities.
+u"""GACTutil YAML module.
 
 This module contains classes UniConstructor, UniRepresenter, UniDumper, and
 UniLoader, which are almost identical to PyYAML classes SafeConstructor,
@@ -38,7 +38,6 @@ from yaml import MappingNode
 from yaml import ScalarNode
 from yaml import SequenceNode
 from yaml import YAMLError
-
 from yaml.composer import Composer
 from yaml.constructor import SafeConstructor
 from yaml.constructor import BaseConstructor
@@ -46,6 +45,7 @@ from yaml.constructor import ConstructorError
 from yaml.emitter import Emitter
 from yaml.parser import Parser
 from yaml.reader import Reader
+from yaml.reader import ReaderError
 from yaml.representer import BaseRepresenter
 from yaml.representer import RepresenterError
 from yaml.representer import SafeRepresenter
@@ -53,33 +53,34 @@ from yaml.resolver import Resolver
 from yaml.scanner import Scanner
 from yaml.serializer import Serializer
 
+from gactutil.core import _newline_charset
+
 ################################################################################
 
-_info = {
-    
-    # Supported YAML scalar tags.
-    u'yaml_scalar_tags': (
-        u'tag:yaml.org,2002:null',
-        u'tag:yaml.org,2002:bool',
-        u'tag:yaml.org,2002:str',
-        u'tag:yaml.org,2002:float',
-        u'tag:yaml.org,2002:int',
-        u'tag:yaml.org,2002:timestamp'
-    ),
-    
-    # Supported YAML scalar types.
-    u'yaml_scalar_types': (
-        type(None),
-        bool,
-        unicode,
-        str,
-        float,
-        int,
-        long,
-        datetime.datetime,
-        datetime.date
-    )
-}
+_newline_charstr = u''.join(_newline_charset)
+
+# Supported YAML scalar tags.
+yaml_scalar_tags = (
+    u'tag:yaml.org,2002:null',
+    u'tag:yaml.org,2002:bool',
+    u'tag:yaml.org,2002:str',
+    u'tag:yaml.org,2002:float',
+    u'tag:yaml.org,2002:int',
+    u'tag:yaml.org,2002:timestamp'
+)
+
+# Supported YAML scalar types.
+yaml_scalar_types = (
+    type(None),
+    bool,
+    unicode,
+    str,
+    float,
+    int,
+    long,
+    datetime.datetime,
+    datetime.date
+)
 
 ################################################################################
 
@@ -203,7 +204,7 @@ class UniConstructor(BaseConstructor):
             return sign*value
         else:
             return sign*float(value)
-    
+
     def construct_yaml_timestamp(self, node):
         value = self.construct_scalar(node)
         match = self.timestamp_regexp.match(node.value)
@@ -300,6 +301,11 @@ class UniRepresenter(BaseRepresenter):
     # Set class data members directly from SafeRepresenter.
     inf_value = SafeRepresenter.inf_value
     
+    def represent_str(self, data):
+        tag = u'tag:yaml.org,2002:str'
+        data = unicode(data, 'utf_8')
+        return self.represent_scalar(tag, data)
+    
     # NB: methods defined after this point are identical to those of SafeRepresenter.
     
     def ignore_aliases(self, data):
@@ -311,22 +317,6 @@ class UniRepresenter(BaseRepresenter):
     def represent_none(self, data):
         return self.represent_scalar(u'tag:yaml.org,2002:null',
                 u'null')
-    
-    def represent_str(self, data):
-        tag = None
-        style = None
-        try:
-            data = unicode(data, 'ascii')
-            tag = u'tag:yaml.org,2002:str'
-        except UnicodeDecodeError:
-            try:
-                data = unicode(data, 'utf-8')
-                tag = u'tag:yaml.org,2002:str'
-            except UnicodeDecodeError:
-                data = data.encode('base64')
-                tag = u'tag:yaml.org,2002:binary'
-                style = '|'
-        return self.represent_scalar(tag, data, style=style)
     
     def represent_unicode(self, data):
         return self.represent_scalar(u'tag:yaml.org,2002:str', data)
@@ -453,7 +443,7 @@ def _init_scalar_representer_info():
     representers = dict()
     
     for t in UniDumper.yaml_representers:
-        if t in _info[u'yaml_scalar_types']:
+        if t in yaml_scalar_types:
             representers[t] = UniDumper.yaml_representers[t]
     
     return representers
@@ -465,7 +455,7 @@ def _init_scalar_resolver_info():
     
     for prefix in UniLoader.yaml_implicit_resolvers:
         for tag, regexp in UniLoader.yaml_implicit_resolvers[prefix]:
-            if tag in _info[u'yaml_scalar_tags']:
+            if tag in yaml_scalar_tags:
                 resolvers.setdefault(prefix, OrderedDict())
                 resolvers[prefix][tag] = regexp
     
@@ -502,24 +492,6 @@ _scalar_resolver_methods = _init_scalar_resolver_info()
 
 ################################################################################
 
-def is_multiline_string(string):
-    """Test if object is a multiline string."""
-    
-    known_line_breaks = (u'\r\n', u'\n', u'\r')
-    
-    if isinstance(string, basestring):
-        
-        for line_break in known_line_breaks:
-            
-            if string.endswith(line_break):
-                string = string[:-len(line_break)]
-                break
-        
-        if any( line_break in string for line_break in known_line_breaks ):
-            return True
-    
-    return False
-
 def unidump(data, stream=None, **kwds):
     u"""Dump data to YAML unicode stream."""
     
@@ -531,7 +503,7 @@ def unidump(data, stream=None, **kwds):
     
     for k, x in fixed_kwargs.items():
         if k in kwds:
-            raise RuntimeError("cannot set reserved keyword argument {!r}".format(k))
+            raise RuntimeError("cannot set reserved keyword argument: {!r}".format(k))
         kwds[k] = x
     
     return dump(data, stream=stream, **kwds)
@@ -550,8 +522,8 @@ def unidump_scalar(data, stream=None):
         except KeyError:
             raise TypeError("cannot dump data of type {!r}".format(type(data).__name__))
         
-        if is_multiline_string(data):
-            raise ValueError("cannot dump multiline string ~ {!r}".format(data))
+        if isinstance(data, basestring) and len(data.splitlines()) > 1:
+            raise ValueError("cannot dump multiline string: {!r}".format(data))
         
         node = method(_scalar_representer, data)
         value = node.value
@@ -560,7 +532,8 @@ def unidump_scalar(data, stream=None):
         value = u''
     
     if stream is not None:
-        stream.write(u'{}{}'.format(value.rstrip(u'\n'), u'\n'))
+        value = value.rstrip(_newline_charstr)
+        stream.write(u'{}{}'.format(value, u'\n'))
     else:
         return value
 
@@ -569,7 +542,7 @@ def uniload_scalar(stream):
     
     if isinstance(stream, basestring):
         
-        lines = stream.splitlines()
+        lines = stream.splitlines(True)
         
     else:
         
@@ -579,11 +552,27 @@ def uniload_scalar(stream):
             raise TypeError("cannot load scalar from input of type {!r}".format(
                 type(stream).__name__))
     
-    # Ensure strings are unicode.
-    lines = [ line.decode('utf_8') for line in lines ]
-    
-    # Strip YAML comments and flanking whitespace from each line.
-    lines = [ ystrip(line) for line in lines ]
+    for i, line in enumerate(lines):
+        
+        # Ensure line is unicode.
+        if isinstance(line, str):
+            line = line.decode('utf_8')
+        
+        # Check line is printable.
+        m = Reader.NON_PRINTABLE.search(line)
+        if m is not None:
+            raise ReaderError('<unicode string>', m.start(), ord(m.group()),
+                'unicode', "special characters are not allowed")
+        
+        try: # Strip comments.
+            j = line.index(u'#')
+        except ValueError: # no comment
+            pass
+        else:
+            line = line[:j]
+        
+        # Strip leading/trailing whitespace.
+        lines[i] = line.strip()
     
     # Strip trailing empty lines.
     while len(lines) > 0 and lines[-1] == u'':
@@ -603,26 +592,8 @@ def uniload_scalar(stream):
     node = ScalarNode(tag, value)
     return _scalar_constructor.construct_object(node)
 
-def ystrip(line):
-    u"""Strip YAML comments and flanking whitespace from a single-line string."""
-    
-    if not isinstance(line, basestring):
-        raise TypeError("cannot strip object of type {!r}".format(
-                type(line).__name__))
-    
-    if is_multiline_string(line):
-        raise ValueError("cannot strip multiline string ~ {!r}".format(line))
-    
-    try: # Strip comments.
-        j = line.index(u'#')
-    except ValueError:
-        pass
-    else:
-        line = line[:j]
-    
-    # Strip leading/trailing whitespace.
-    line = line.strip()
-    
-    return line
+################################################################################
+
+__all__ = ['unidump', 'uniload', 'unidump_scalar', 'uniload_scalar', 'YAMLError']
 
 ################################################################################

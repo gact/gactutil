@@ -1,16 +1,16 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-u"""GACTutil FASTA module."""
+u"""GACTutil FASTA utilities."""
 
 from Bio import SeqIO
 
+from gactutil import FrozenList
 from gactutil import TextReader
-from gactutil.core.frozen import FrozenList
-from gactutil.gaction import gactfunc
+from gactutil import gactfunc
 
 @gactfunc
 def get_fasta_headers(infile):
-    u"""Get FASTA headers.
+    u"""Get headers of FASTA file.
     
     Args:
         infile (unicode): Input FASTA file.
@@ -19,8 +19,9 @@ def get_fasta_headers(infile):
         FrozenList: FASTA headers.
     """
     with TextReader(infile) as fh:
-        headers = [ record.description for record in SeqIO.parse(fh, 'fasta') ]
-    return FrozenList(headers)
+        headers = FrozenList( record.description
+            for record in SeqIO.parse(fh, 'fasta') )
+    return headers
 
 def recode_fasta(infile, outfile, mapping):
     u"""Recode FASTA data.

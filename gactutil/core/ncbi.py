@@ -1,25 +1,29 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-u"""GACTutil NCBI utilities."""
+u"""GACTutil NCBI module."""
 
+import os
 from socket import error as SocketError
 from time import sleep
 from urllib2 import HTTPError
 
 from Bio import Entrez
 
-from gactutil import _read_setting
+from gactutil.core.about import about
+from gactutil.core import const
 
 ################################################################################
 
-_info = {
-    
-    # Set list of known NCBI query faults.
-    u'faults': ('WarningList', 'ErrorList'),
-    
-    # Number of seconds to wait if NCBI server appears to be busy.
-    u'polite_delay': 60.0
-}
+Entrez.email = about[u'author_email']
+Entrez.tool = about[u'name']
+
+################################################################################
+
+# Number of seconds to wait between NCBI queries
+const.ncbi_query_beat = 1.0
+
+# Number of seconds to wait if NCBI server appears to be busy.
+const.ncbi_query_delay = 60.0
 
 ################################################################################
 
@@ -34,25 +38,13 @@ def check_efetch(**kwargs):
     # Init actual number of efetch attempts.
     attempts = 0
     
-    # Set Entrez email attribute from argument or setting.
-    try:
-        email = kwargs.pop(u'email')
-        assert isinstance(email, basestring)
-    except (AssertionError, KeyError):
-        try:
-            email = _read_setting(u'email')
-            assert isinstance(email, basestring)
-        except (AssertionError, RuntimeError):
-            raise RuntimeError("Entrez efetch failed - please provide an email address")
-    Entrez.email = email
-    
     # Do NCBI efetch.
     while attempts < max_attempts:
         try:
             request = Entrez.efetch(**kwargs)
             result = Entrez.read(request)
         except (HTTPError, RuntimeError, SocketError, URLError):
-            sleep( _info(u'polite_delay') )
+            sleep( const.ncbi_query_delay )
         else:
             break
     
@@ -61,9 +53,9 @@ def check_efetch(**kwargs):
         raise RuntimeError("Entrez efetch failed after {!r} attempts".format(attempts))
     
     # Validate result.
-    if any( fault in result for fault in _info[u'faults'] ):
+    if any( fault in result for fault in ('WarningList', 'ErrorList') ):
         msg = 'check parameters'
-        for fault in _info[u'faults']:
+        for fault in ('WarningList', 'ErrorList'):
             if 'OutputMessage' in result[fault]:
                 msg = '\n'.join( result[fault]['OutputMessage'] )
                 break
@@ -82,25 +74,13 @@ def check_esearch(**kwargs):
     # Init actual number of esearch attempts.
     attempts = 0
     
-    # Set Entrez email attribute from argument or setting.
-    try:
-        email = kwargs.pop(u'email')
-        assert isinstance(email, basestring)
-    except (AssertionError, KeyError):
-        try: 
-            email = _read_setting(u'email')
-            assert isinstance(email, basestring)
-        except (AssertionError, RuntimeError):
-            raise RuntimeError("Entrez esearch failed - please provide an email address")
-    Entrez.email = email
-    
     # Do NCBI esearch.
     while attempts < max_attempts:
         try:
             request = Entrez.esearch(**kwargs)
             result = Entrez.read(request)
         except (HTTPError, RuntimeError, SocketError, URLError):
-            sleep( _info(u'polite_delay') )
+            sleep( const.ncbi_query_delay )
         else:
             break
     
@@ -109,14 +89,18 @@ def check_esearch(**kwargs):
         raise RuntimeError("Entrez esearch failed after {!r} attempts".format(attempts))
     
     # Validate result.
-    if any( fault in result for fault in _info[u'faults'] ):
+    if any( fault in result for fault in ('WarningList', 'ErrorList') ):
         msg = "check parameters"
-        for fault in _info[u'faults']:
+        for fault in ('WarningList', 'ErrorList'):
             if 'OutputMessage' in result[fault]:
                 msg = '\n'.join( result[fault]['OutputMessage'] )
                 break
         raise RuntimeError("Entrez esearch failed - {}".format(msg))
     
     return result
+
+################################################################################
+
+__all__ = ['check_efetch', 'check_esearch']
 
 ################################################################################

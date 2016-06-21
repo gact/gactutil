@@ -8,6 +8,7 @@ In addition to the Python standard library, this package depends on the followin
 
 - [BCBio](https://github.com/chapmanb/bcbb)
 - [Biopython](http://biopython.org/)
+- [NumPy](http://www.numpy.org/)
 - [PySAM](https://github.com/pysam-developers/pysam)
 - [PyVCF](https://github.com/jamescasbon/PyVCF)
 - [PyYAML](http://pyyaml.org/)

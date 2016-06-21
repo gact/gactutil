@@ -2,143 +2,227 @@
 # -*- coding: utf-8 -*-
 u"""GACTutil frozen data module."""
 
-from __future__ import absolute_import
+from collections import Container
 from collections import Iterable
 from collections import Mapping
 from collections import Sequence
 from collections import Set
+import copy
 import csv
-from datetime import date
-from datetime import datetime
+import datetime
 from itertools import izip
 from StringIO import StringIO
-from types import NoneType
 
-from gactutil.core.csv import csvtext
+from gactutil.core import _ImmutableScalarTypes
+from gactutil.core.deep import DeepDict
+from gactutil.core.table import _TableHeadings
+from gactutil.core.table import Table
 
 ################################################################################
 
-class FrozenDict(Mapping):
-    u"""Hashable dictionary class.
+class FrozenObject(object):
+    u"""Base class for a frozen object."""
     
-    A FrozenDict can be created and accessed in the same way as a builtin dict.
-    The values of a FrozenDict are recursively frozen when the FrozenDict is
-    created, and the resulting object cannot be subsequently modified through
-    its public interface.
+    @classmethod
+    def _freeze(cls, x, memo=set()):
+        raise NotImplementedError("{} object does not support the freeze operation".format(
+            self.__class__.__name__))
+    
+    @classmethod
+    def freeze(cls, x):
+        u"""Convert to a frozen object."""
+        return cls._freeze(x)
+    
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError("FrozenObject is an abstract class")
+    
+    def __delattr__(self, name):
+        raise TypeError("{} object does not support attribute deletion".format(
+            self.__class__.__name__))
+    
+    def __delitem__(self, key):
+        raise TypeError("{} object does not support item deletion".format(
+            self.__class__.__name__))
+    
+    def __eq__(self, other):
+        return type(self) is type(other) and self.__dict__ == other.__dict__
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
+    def __setattr__(self, name, value):
+        if hasattr(self, '_data'):
+            raise TypeError("{} object does not support attribute assignment".format(
+                self.__class__.__name__))
+        self.__dict__[name] = value
+    
+    def __setitem__(self, key, value):
+        raise TypeError("{} object does not support item assignment".format(
+            self.__class__.__name__))
+    
+    def _thaw(self, memo=None):
+        raise NotImplementedError("{} object does not support the thaw operation".format(
+            self.__class__.__name__))
+    
+    def thaw(self):
+        u"""Convert to a mutable object."""
+        return self._thaw()
+
+class FrozenNestable(FrozenObject):
+    u"""Base class for a frozen nestable container."""
+    
+    @classmethod
+    def _freeze(cls, x, memo=set()):
+        return cls(x, memo=memo)
+    
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError("FrozenNestable is an abstract class")
+    
+    def __contains__(self, item):
+        return item in self._data
+    
+    def __copy__(self):
+        return self.__class__( copy.copy(self._data) )
+    
+    def __deepcopy__(self):
+        return self.__class__( copy.deepcopy(self._data) )
+    
+    def __eq__(self, other):
+        return type(self) is type(other) and self._data == other._data
+    
+    def __iter__(self):
+        return iter(self._data)
+    
+    def __len__(self):
+        return len(self._data)
+    
+    def __str__(self):
+        return unicode(self._data).encode('utf_8')
+    
+    def __unicode__(self):
+        return unicode(self._data)
+
+################################################################################
+
+class FrozenDict(FrozenNestable, Mapping):
+    u"""Frozen dictionary class.
+    
+    A FrozenDict can be created and accessed in the same way as a builtin dict,
+    except that keyword arguments cannot be used in its constructor. The values
+    of a FrozenDict are recursively frozen when the FrozenDict is created, and
+    the resulting object cannot be modified through its public interface.
     """
     
     @classmethod
     def fromkeys(cls, keys, value=None):
-        return cls( dict.fromkeys(keys, value=value) )
+        return cls( dict.fromkeys(keys, value) )
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, data, **kwargs):
         
-        try: # Init set of checked object IDs.
-            checked = kwargs.pop('memo_set')
-        except KeyError:
-            checked = set()
+        memo = kwargs.pop('memo', set())
         
-        temp_dict = dict(*args, **kwargs)
+        if len(kwargs) > 0:
+            raise ValueError("{}() cannot take unenumerated keyword arguments".format(
+                self.__class__.__name__))
         
-        # Recursively coerce each container of
-        # known type to its frozen counterpart.
-        for k, x in temp_dict.items():
+        if isinstance(data, Mapping):
+            data = [ [ k, data[k] ] for k in data ]
+        elif not isinstance(data, Iterable):
+            raise TypeError("{} data is not iterable".format(
+                type(data).__name__))
+        
+        temp_dict = dict()
+        
+        for i, pair in enumerate(data):
             
-            # Skip if previously checked.
-            xid = id(x)
-            if xid in checked:
-                continue
-            checked.add(xid)
+            pair = list(pair)
             
-            # Skip if hashable type.
-            # NB: must handle strings before Iterable.
-            if isinstance(x, (bool, float, frozenset, int, long, basestring)):
-                continue
+            if len(pair) != 2:
+                raise ValueError("{} sequence element #{} has length {}; 2 is required".format(
+                    self.__class__.__name__, i, len(pair)))
             
-            # If this is a Mapping, coerce to FrozenDict..
-            if isinstance(x, Mapping):
+            for j, x in enumerate(pair):
                 
-                if isinstance(x, FrozenDict):
+                xid = id(x)
+                if xid in memo:
+                    if isinstance(x, Container) and not isinstance(x, basestring):
+                        raise ValueError("{} object cannot contain a circular "
+                            "data structure".format(self.__class__.__name__))
                     continue
-                temp_dict[k] = x = FrozenDict(x, memo_set=checked)
-                checked.add( id(x) )
+                memo.add(xid)
                 
-            # ..otherwise if Set, coerce to frozenset..
-            # NB: must handle sets before Iterable.
-            elif isinstance(x, Set):
-                
-                temp_dict[k] = x = frozenset(x)
-                checked.add( id(x) )
-                for element in x:
-                    checked.add( id(element) )
-                
-            # ..otherwise if Iterable, coerce to FrozenList..
-            elif isinstance(x, Iterable):
-                
-                if isinstance(x, FrozenList):
+                if isinstance(x, _ImmutableScalarTypes + (FrozenObject, frozenset)):
                     continue
-                temp_dict[k] = x = FrozenList(x, memo_set=checked)
-                checked.add( id(x) )
                 
-            # ..otherwise check if hashable.
-            else:
-                try:
-                    hash(x)
-                except TypeError:
-                    raise TypeError("unhashable type: {!r}".format(type(x).__name__))
+                if isinstance(x, tuple):
+                    try:
+                        hash(x)
+                    except TypeError:
+                        pass
+                    else:
+                        continue
+                
+                for mutable, frozen in _FrozenTypePairs:
+                    if isinstance(x, mutable):
+                        pair[j] = frozen._freeze(x, memo=memo)
+                        break
+                else:
+                    try:
+                        hash(x)
+                    except TypeError:
+                        raise TypeError("unhashable type: {!r}".format(
+                            type(x).__name__))
+            
+            temp_dict[ pair[0] ] = pair[1]
         
-        # Set dict attribute.
         self._data = temp_dict
     
-    def __delattr__(self, key):
-        raise TypeError("{} object does not support attribute deletion".format(
-            self.__class__.__name__))
-    
-    def __eq__(self, other):
-        return isinstance(other, FrozenDict) and self._data == other._data
-    
     def __getitem__(self, key):
-        return self._data.__getitem__(key)
+        return self._data[key]
     
     def __hash__(self):
         return hash( frozenset( self._data.items() ) )
     
-    def __iter__(self):
-        return self._data.__iter__()
-    
-    def __len__(self):
-        return self._data.__len__()
-    
-    def __ne__(self, other):
-        return not isinstance(other, FrozenDict) or self._data != other._data
-    
     def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, self._data.__repr__()[1:-1])
+        return '{}({})'.format(self.__class__.__name__, repr(self._data)[1:-1])
     
-    def __setattr__(self, key, value):
-        if hasattr(self, '_data'):
-            raise TypeError("{} object does not support attribute assignment".format(
-                self.__class__.__name__))
-        self.__dict__[key] = value
-    
-    def __str__(self):
-        return self.__unicode__().encode('utf_8')
-    
-    def __unicode__(self):
-        return unicode(self._data)
-    
-    def copy(self):
-        return self
+    def _thaw(self, memo=None):
+        
+        # NB: default to None, create memo set explicitly
+        if memo is None:
+            memo = set()
+        
+        result = dict(self)
+        
+        for k, x in result.items():
+            
+            xid = id(x)
+            if xid in memo: continue
+            memo.add(xid)
+            
+            if isinstance(x, FrozenObject):
+                result[k] = x._thaw(memo=memo)
+        
+        return result
     
     def clear(self):
         raise TypeError("{} object does not support the clear operation".format(
             self.__class__.__name__))
     
-    def get(self, key):
-        return self._data.get(key)
-        
+    def copy(self):
+        return self.__class__( self._data.copy() )
+    
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+    
     def has_key(self, key):
         return self._data.has_key(key)
+        
+    def items(self):
+        return self._data.items()
         
     def iteritems(self):
         return self._data.iteritems()
@@ -148,6 +232,9 @@ class FrozenDict(Mapping):
     
     def itervalues(self):
         return self._data.itervalues()
+    
+    def keys(self):
+        return self._data.keys()
     
     def pop(self, *args, **kwargs):
         raise TypeError("{} object does not support the pop operation".format(
@@ -161,41 +248,12 @@ class FrozenDict(Mapping):
         raise TypeError("{} object does not support the setdefault operation".format(
             self.__class__.__name__))
     
-    def to_dict(self, **kwargs):
-        u"""Return object as a mutable dict."""
-        
-        try: # Init set of checked object IDs.
-            checked = kwargs.pop('memo_set')
-        except KeyError:
-            checked = set()
-        
-        # Create dict from object.
-        result = dict(self)
-        
-        # Recursively coerce each frozen container to its mutable counterpart.
-        for k, x in result.items():
-            
-            # Skip if previously checked.
-            xid = id(x)
-            if xid in checked:
-                continue
-            checked.add(xid)
-            
-            if isinstance(x, FrozenDict):
-                result[k] = x = x.to_dict(memo_set=checked)
-                checked.add( id(x) )
-            elif isinstance(x, frozenset):
-                result[k] = x = set(x)
-                checked.add( id(x) )
-            elif isinstance(x, FrozenList):
-                result[k] = x = x.to_list(memo_set=checked)
-                checked.add( id(x) )
-        
-        return result
-    
     def update(self, *args, **kwargs):
-        raise TypeError("{} object does not support the update operation".format(
+        raise TypeError("{!r} object does not support the update operation".format(
             self.__class__.__name__))
+    
+    def values(self):
+        return self._data.values()
     
     def viewitems(self):
         return self._data.viewitems()
@@ -205,81 +263,87 @@ class FrozenDict(Mapping):
     
     def viewvalues(self):
         return self._data.viewvalues()
+
+class FrozenDeepDict(FrozenDict, DeepDict):
+    u"""Frozen nested dictionary class.
     
-class FrozenList(Sequence):
-    u"""Hashable list class.
-    
-    A FrozenList can be created and accessed in the same way as a builtin list.
-    The values of a FrozenList are recursively frozen when the FrozenList is
-    created, and the resulting object cannot be subsequently modified through
-    its public interface.
+    A FrozenDeepDict can be created and accessed in the same way as a DeepDict,
+    except that keyword arguments cannot be used in its constructor. The values
+    of a FrozenDeepDict are recursively frozen when the FrozenDict is created,
+    and the resulting object cannot be modified through its public interface.
     """
+    
+    @classmethod
+    def fromkeys(cls, keys, value):
+        return FrozenDict( DeepDict.fromkeys(keys, value) )
     
     def __init__(self, *args, **kwargs):
         
-        try: # Init set of checked object IDs.
-            checked = kwargs.pop('memo_set')
-        except KeyError:
-            checked = set()
+        memo = kwargs.pop('memo', set())
         
-        temp_list = list(*args, **kwargs)
+        if len(kwargs) > 0:
+            raise ValueError("{}() cannot take unenumerated keyword arguments".format(
+                self.__class__.__name__))
         
-        # Recursively coerce each container of
-        # known type to its frozen counterpart.
-        for i, x in enumerate(temp_list):
+        FrozenDict.__init__(self, DeepDict(*args), memo=memo)
+    
+    def __getitem__(self, keys):
+        return DeepDict.__getitem__(self, keys)
+    
+    def _thaw(self, memo=None):
+        return DeepDict( FrozenDict._thaw(self, memo=memo) )
+
+class FrozenList(FrozenNestable, Sequence):
+    u"""Frozen list class.
+    
+    A FrozenList can be created and accessed in the same way as a builtin list.
+    Its elements are recursively frozen when the FrozenList is created, and the
+    resulting object cannot be modified through its public interface.
+    """
+    
+    def __init__(self, data, **kwargs):
+        
+        memo = kwargs.pop('memo', set())
+        
+        if len(kwargs) > 0:
+            raise ValueError("{}() cannot take unenumerated keyword arguments".format(
+                self.__class__.__name__))
+        
+        data = list(data)
+        
+        for i, x in enumerate(data):
             
-            # Skip if previously checked.
             xid = id(x)
-            if xid in checked:
+            if xid in memo:
+                if isinstance(x, Container) and not isinstance(x, basestring):
+                    raise ValueError("{} object cannot contain a circular data structure".format(
+                        self.__class__.__name__))
                 continue
-            checked.add(xid)
+            memo.add(xid)
             
-            # Skip if hashable type.
-            # NB: must handle strings before Iterable.
-            if isinstance(x, (bool, float, frozenset, int, long, basestring)):
+            if isinstance(x, _ImmutableScalarTypes + (FrozenObject, frozenset)):
                 continue
             
-            # If this is a Mapping, coerce to FrozenDict..
-            if isinstance(x, Mapping):
-                
-                if isinstance(x, FrozenDict):
+            if isinstance(x, tuple):
+                try:
+                    hash(x)
+                except TypeError:
+                    pass
+                else:
                     continue
-                temp_list[i] = FrozenDict(x, memo_set=checked)
-                checked.add( id(temp_list[i]) )
             
-            # ..otherwise if Set, coerce to frozenset..
-            # NB: must handle sets before Iterable.
-            elif isinstance(x, Set):
-                
-                temp_dict[k] = x = frozenset(x)
-                checked.add( id(x) )
-                for element in x:
-                    checked.add( id(element) )
-            
-            # ..otherwise if Iterable, coerce to FrozenList..
-            elif isinstance(x, Iterable):
-                
-                if isinstance(x, FrozenList):
-                    continue
-                temp_list[i] = FrozenList(x, memo_set=checked)
-                checked.add( id(temp_list[i]) )
-                
-            # ..otherwise check if hashable.
+            for mutable, frozen in _FrozenTypePairs:
+                if isinstance(x, mutable):
+                    data[i] = frozen._freeze(x, memo=memo)
+                    break
             else:
                 try:
                     hash(x)
                 except TypeError:
-                    raise TypeError("unhashable type: {!r}".format(type(x).__name__))
+                    raise TypeError("unhashable type: {!r}".format(
+                        type(x).__name__))
         
-        # Set tuple attribute.
-        self._data = tuple(temp_list)
-    
-    def __delattr__(self, *args, **kwargs):
-        raise TypeError("{} object does not support attribute deletion".format(
-            self.__class__.__name__))
-    
-    def __eq__(self, other):
-        return isinstance(other, FrozenList) and self._data == other._data
+        self._data = tuple(data)
     
     def __getitem__(self, index):
         return self._data[index]
@@ -287,26 +351,33 @@ class FrozenList(Sequence):
     def __hash__(self):
         return hash(self._data)
     
-    def __len__(self):
-        return len(self._data)
-    
-    def __ne__(self, other):
-        return not isinstance(other, FrozenList) or self._data != other._data
-    
     def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, self._data.__repr__()[1:-1])
+        return '{}({})'.format(self.__class__.__name__, repr(self._data)[1:-1])
     
-    def __setattr__(self, index, value):
-        if hasattr(self, '_data'):
-            raise TypeError("{} object does not support attribute assignment".format(
-                self.__class__.__name__))
-        self.__dict__[index] = value
+    def __reversed__(self):
+        return reversed(self._data)
     
-    def __str__(self):
-        return self.__unicode__().encode('utf_8')
-    
-    def __unicode__(self):
-        return unicode(self._data)
+    def _thaw(self, memo=None):
+        
+        # NB: default to None, create memo set explicitly
+        if memo is None:
+            memo = set()
+        
+        result = list(self)
+        
+        for i, x in enumerate(result):
+            
+            xid = id(x)
+            if xid in memo: continue
+            memo.add(xid)
+            
+            if isinstance(x, _ImmutableScalarTypes):
+                continue
+            
+            if isinstance(x, FrozenObject):
+                result[i] = x._thaw(memo=memo)
+        
+        return result
     
     def append(self, *args, **kwargs):
         raise TypeError("{} object does not support the append operation".format(
@@ -323,7 +394,8 @@ class FrozenList(Sequence):
         try:
             return self._data.index(x)
         except ValueError:
-            raise ValueError("{!r} is not in {}".format(x, self.__class__.__name__))
+            raise ValueError("{!r} is not in {}".format(
+                x, self.__class__.__name__))
     
     def insert(self, *args, **kwargs):
         raise TypeError("{} object does not support item insertion".format(
@@ -331,7 +403,7 @@ class FrozenList(Sequence):
     
     def pop(self, *args, **kwargs):
         raise TypeError("{} object does not support the pop operation".format(
-                self.__class__.__name__))
+            self.__class__.__name__))
     
     def remove(self, *args, **kwargs):
         raise TypeError("{} object does not support item removal".format(
@@ -344,524 +416,228 @@ class FrozenList(Sequence):
     def sort(self, *args, **kwargs):
         raise TypeError("{} object does not support in-place sorting".format(
                 self.__class__.__name__))
-    
-    def to_list(self, **kwargs):
-        u"""Return object as a mutable list."""
-        
-        try: # Init set of checked object IDs.
-            checked = kwargs.pop('memo_set')
-        except KeyError:
-            checked = set()
-        
-        # Init list from object.
-        result = list(self)
-        
-        # Recursively coerce each frozen container to its mutable counterpart.
-        for i, x in enumerate(result):
-            
-            # Skip if previously checked.
-            xid = id(x)
-            if xid in checked:
-                continue
-            checked.add(xid)
-            
-            if isinstance(x, FrozenDict):
-                result[i] = x = x.to_dict(memo_set=checked)
-                checked.add( id(x) )
-            elif isinstance(x, frozenset):
-                result[k] = x = set(x)
-                checked.add( id(x) )
-            elif isinstance(x, FrozenList):
-                result[i] = x = x.to_list(memo_set=checked)
-                checked.add( id(x) )
-        
-        return result
 
-class FrozenTable(object):
-    u"""Hashable table class.
+class FrozenSet(FrozenNestable, Set):
+    u"""Frozen set class.
     
-    A FrozenTable can be created from either an iterable of values, or an
-    iterable of iterables. The table is filled in row order, with row size
-    determined by the number of fieldnames. Once created, the resulting
-    object cannot be subsequently modified through its public interface.
+    A FrozenSet can be created and accessed in the same way as a set or frozenset.
+    The values of a FrozenSet are recursively frozen when it is created, and the
+    resulting object cannot be modified through its public interface.
     """
     
-    # Supported FrozenTable cell value types. Cell values must be representable
-    # in a single cell of a comma-delimited table, so in addition to being one
-    # of the listed types, cell values must not contain any unescaped newlines.
-    supported_types = (NoneType, bool, basestring, float, int, long,
-        datetime, date)
-    
-    @property
-    def fieldcount(self):
-        u"""Number of fields in FrozenTable."""
-        return len(self._field_list)
-    
-    @property
-    def fieldnames(self):
-        u"""Tuple of FrozenTable fieldnames."""
-        return self._field_list
-    
-    @staticmethod
-    def _resolve_index(index, length):
-        u"""Resolve positive index for a sequence of the given length."""
+    def __init__(self, data, **kwargs):
         
-        if not isinstance(index, int):
-            raise TypeError("index must be integer, not {!r}".format(
-                type(index).__name__))
-        
-        if not isinstance(length, int):
-            raise TypeError("index resolution length must be integer, not {!r}".format(
-                type(length).__name__))
-        
-        if index < -length or index >= length:
-            raise IndexError("index ({!r}) out of range".format(index))
-        
-        if index < 0:
-            index += length
-        
-        return index
-    
-    @classmethod
-    def from_dict(cls, data):
-        u"""Get FrozenTable from dict."""
-        
-        if not isinstance(data, Mapping):
-            raise TypeError("data not of mapping type ~ {!r}".format(data))
-        
-        fieldnames = sorted( data.keys() )
-        
-        col_length = None
-        
-        for x in data.values():
+        memo = kwargs.pop('memo', set())
             
-            try:
-                assert isinstance(x, Sequence)
-                assert not isinstance(x, basestring)
-                
-                row_count = len(x)
-                
-            except (AssertionError, TypeError):
-                raise TypeError("dict data column must be a sized sequence, not {!r}".format(
-                    type(x).__name__))
-            
-            if col_length is None:
-                col_length = row_count
-            elif row_count != col_length:
-                raise ValueError("dict data columns have inconsistent lengths")
-        
-        return FrozenTable(data=[ x for x in izip(*[ data[k]
-            for k in fieldnames ]) ], fieldnames=fieldnames)
-    
-    def __init__(self, data=(), fieldnames=()):
-        
-        for fieldname in fieldnames:
-            if not isinstance(fieldname, basestring):
-                raise TypeError("{} fieldname must be of string type, not {!r}".format(
-                    self.__class__.__name__, type(fieldname).__name__))
-        
-        # Set tuple of fieldnames.
-        self._field_list = tuple(fieldnames)
-        
-        # Set mapping of fieldnames to column indices.
-        self._field_dict = FrozenDict( (fieldname, i)
-            for i, fieldname in enumerate(fieldnames) )
-        
-        if len(self._field_dict) != len(self._field_list):
-            raise ValueError("duplicate {} fieldnames".format(
+        if len(kwargs) > 0:
+            raise ValueError("{}() cannot take unenumerated keyword arguments".format(
                 self.__class__.__name__))
         
-        # Check number of dimensions in input data.
-        try:
-            assert isinstance(data, Iterable)
-            assert not isinstance(data, basestring)
-            
-            if ( len(data) > 0 and isinstance(data[0], Iterable) and
-                not isinstance(data[0], basestring) ):
-                ndim = 2
-            else:
-                ndim = 1
-            
-        except (AssertionError, TypeError):
-            raise TypeError("{} data must be a sized iterable, not {!r}".format(
-                self.__class__.__name__, type(data).__name__))
+        data = list(data)
         
-        # Get table row width from number of fieldnames.
-        row_width = len(fieldnames)
-        
-        table = list()
-        
-        # If data is an iterable of iterables, append rows
-        # to temp table, validating the width of each row..
-        if ndim == 2:
+        for i, x in enumerate(data):
             
-            row_count = len(data)
-            
-            for row in data:
-                if len(row) != row_width:
-                    raise ValueError("{} data has inconsistent row widths".format(
+            xid = id(x)
+            if xid in memo:
+                if isinstance(x, Container) and not isinstance(x, basestring):
+                    raise ValueError("{} object cannot contain a circular data structure".format(
                         self.__class__.__name__))
-                table.append( tuple(row) )
+                continue
+            memo.add(xid)
             
-        # ..otherwise iterate over input data with
-        # step equal to the number of fieldnames.
-        elif row_width > 0:
+            if isinstance(x, _ImmutableScalarTypes + (FrozenObject, frozenset)):
+                continue
             
-            row_count, remainder = divmod(len(data), row_width)
+            if isinstance(x, tuple):
+                try:
+                    hash(x)
+                except TypeError:
+                    pass
+                else:
+                    continue
             
-            if remainder:
-                raise ValueError("{} data has inconsistent row widths".format(
-                    self.__class__.__name__))
-            
-            for i in xrange(0, row_count * row_width, row_width):
-                j = i + row_width
-                table.append( tuple(data[i:j]) )
+            for mutable, frozen in _FrozenTypePairs:
+                if isinstance(x, mutable):
+                    data[i] = frozen._freeze(x, memo=memo)
+                    break
+            else:
+                try:
+                    hash(x)
+                except TypeError:
+                    raise TypeError("unhashable type: {!r}".format(
+                        type(x).__name__))
         
-        # Validate table contents.
-        for row in table:
-            for x in row:
-                if isinstance(x, basestring) and any( line_break in x
-                    for line_break in (u'\r\n', u'\n', u'\r') ):
-                    raise ValueError("{} is unrepresentable - contains multiline string value ~ {!r}".format(
-                        self.__class__.__name__, x))
-                elif not isinstance(x, FrozenTable.supported_types):
-                    raise TypeError("{} is invalid - contains value of unknown or non-scalar type {!r}".format(
-                        self.__class__.__name__, type(x).__name__))
-        
-        self._data = tuple(table)
+        self._data = frozenset(data)
     
-    def __contains__(self, item):
-        return any( item in row for row in self._data )
-    
-    def __delattr__(self, key):
-        raise TypeError("{} does not support attribute deletion".format(
-            self.__class__.__name__))
-    
-    def __delitem__(self, key):
-        raise TypeError("{} does not support item deletion".format(
-            self.__class__.__name__))
-    
-    def __eq__(self, other):
-        return ( isinstance(other, self.__class__) and
-            self._field_list == other._field_list and
-            self._data == other._data )
+    def __and__(self, *args, **kwargs):
+        return FrozenSet( self._data.__and__(*args, **kwargs) )
     
     def __getitem__(self, key):
-        
-        try: # Split key into row and column keys.
-            row_key, col_key = key
-        except ValueError:
-            problem = 'too many' if len(key) > 2 else 'too few'
-            raise ValueError("{} {} indices/keys".format(
-                problem, self.__class__.__name__))
-        except TypeError:
-            raise TypeError("{} index/key is of invalid type ({})".format(
-                self.__class__.__name__, type(key).__name__))
-        
-        # Check if row key is a single index.
-        is_row_index = isinstance(row_key, int)
-        
-        # Check if column key is a single index or equivalent fieldname.
-        is_col_index = isinstance(col_key, (int, basestring))
-        
-        # If both row and column index specified, get the specified value..
-        if is_row_index and is_col_index:
-            
-            r = self._resolve_record_index(row_key)
-            c = self._resolve_field_index(col_key)
-            item = self._data[r][c]
-            
-        # ..otherwise if one row and multiple columns specified, get
-        # the specified FrozenRecord subset as a FrozenRecord object..
-        elif is_row_index:
-            
-            r = self._resolve_record_index(row_key)
-            col_indices = self._resolve_field_indices(col_key)
-            data = [ self._data[r][c] for c in col_indices ]
-            fieldnames = [ self._field_list[c] for c in col_indices ]
-            item = FrozenRecord(data, fieldnames)
-            
-        # ..otherwise if multiple rows and multiple columns specified,
-        # get the specified FrozenTable subset as a FrozenTable object.
-        else:
-            
-            row_indices = self._resolve_record_indices(row_key)
-            if is_col_index:
-                col_indices = [ self._resolve_field_index(col_key) ]
-            else:
-                col_indices = self._resolve_field_indices(col_key)
-            data = [ [ self._data[r][c] for c in col_indices ]
-                for r in row_indices ]
-            fieldnames = [ self._field_list[c] for c in col_indices ]
-            item = FrozenTable(data, fieldnames)
-        
-        return item
+        raise TypeError("{} object does not support indexing".format(
+            self.__class__.__name__))
+    
+    def __ge__(self, *args, **kwargs):
+        return self._data.__ge__(*args, **kwargs)
+    
+    def __gt__(self, *args, **kwargs):
+        return self._data.__gt__(*args, **kwargs)
     
     def __hash__(self):
-        return hash( (self._field_list, self._data) )
+        return hash(self._data)
     
-    def __iter__(self):
-        for row in self._data:
-            yield FrozenRecord(row, self._field_list)
+    def __le__(self, *args, **kwargs):
+        return self._data.__le__(*args, **kwargs)
     
-    def __len__(self):
-        return self._data.__len__()
+    def __lt__(self, *args, **kwargs):
+        return self._data.__lt__(*args, **kwargs)
     
-    def __ne__(self, other):
-        return not self.__eq__(other)
+    def __or__(self, *args, **kwargs):
+        return FrozenSet( self._data.__or__(*args, **kwargs) )
     
     def __repr__(self):
-        
-        if len(self._data) == 0:
-            return 'FrozenTable()'
-        
-        fieldnames = [ repr(fieldname) for fieldname in self._field_list ]
-        
-        records = list()
-        
-        for row in self._data:
-            
-            fields = [ '{}={}'.format(fieldname, repr(value))
-                for fieldname, value in zip(fieldnames, row) ]
-            
-            record = 'FrozenRecord({})'.format(', '.join(fields))
-            
-            records.append(record)
-        
-        return 'FrozenTable( {} )'.format(', '.join(records))
+        return '{}({})'.format(self.__class__.__name__, repr(self._data)[11:-2])
     
-    def __reversed__(self):
-        for row in reversed(self._data):
-            yield FrozenRecord(row, self._field_list)
+    def __sub__(self, *args, **kwargs):
+        return FrozenSet( self._data.__sub__(*args, **kwargs) )
     
-    def __setattr__(self, key, value):
-        if hasattr(self, '_data'):
-            raise TypeError("{} does not support attribute assignment".format(
-                self.__class__.__name__))
-        self.__dict__[key] = value
+    def __xor__(self, *args, **kwargs):
+        return FrozenSet( self._data.__xor__(*args, **kwargs) )
     
-    def __setitem__(self, key, value):
-        raise TypeError("{} does not support item assignment".format(
-                self.__class__.__name__))
+    def _thaw(self, memo=None):
+        # NB: elements must remain hashable, so cannot be thawed
+        return set(self)
     
-    def __str__(self):
-        
-        sh = StringIO()
-        writer = csv.writer(sh, dialect=csvtext)
-        
-        for row in (self._field_list,) + self._data:
-            row = [ x.encode('utf_8') if isinstance(x, unicode)
-                else str(x) for x in row ]
-            writer.writerow(row)
-        
-        result = sh.getvalue()
-        sh.close()
-        
-        return result
+    def add(self, *args, **kwargs):
+        raise TypeError("{} object does not support element addition".format(
+            self.__class__.__name__))
     
-    def __unicode__(self):
-        return self.__str__().decode('utf_8')
+    def clear(self):
+        raise TypeError("{} object does not support the clear operation".format(
+            self.__class__.__name__))
     
-    def _resolve_field_index(self, key):
-        u"""Resolve field index from the given index or fieldname."""
-        
-        if isinstance(key, basestring):
-            
-            index = self.fieldindex(key)
-            
-        elif isinstance(key, int):
-            
-            index = key
-            length = len(self._field_list)
-            
-            if index < -length or index >= length:
-                raise IndexError("{} field index ({!r}) out of range".format(
-                    self.__class__.__name__, index))
-            
-            if index < 0:
-                index += length
-            
-        else:
-            raise TypeError("cannot resolve field index from object of type {!r}".format(
-                type(key).__name__))
-        
-        return index
+    def copy(self):
+        return self.__class__( self._data.copy() )
     
-    def _resolve_field_indices(self, key):
-        u"""Resolve field indices from the given key."""
-        
-        if isinstance(key, slice):
-            
-            indices = tuple( i for i in
-                xrange( *key.indices( len(self._field_list) ) ) )
-            
-        elif isinstance(key, Iterable) and not isinstance(key, basestring):
-            
-            indices = tuple( self._resolve_field_index(k) for k in key )
-            
-        elif key is Ellipsis:
-            
-            indices = tuple( i for i in xrange( len(self._field_list) ) )
-            
-        else:
-            raise TypeError("cannot resolve field indices from object of type {!r}".format(
-                type(key).__name__))
-        
-        return indices
+    def difference(self, *args, **kwargs):
+        return FrozenSet( self._data.difference(*args, **kwargs) )
     
-    def _resolve_record_index(self, key):
-        u"""Resolve record index from the given index."""
-        
-        if isinstance(key, int):
-            
-            length = len(self._data)
-            index = key
-            
-            if index < -length or index >= length:
-                raise IndexError("{} record index ({!r}) out of range".format(
-                    self.__class__.__name__, index))
-            
-            if index < 0:
-                index += length
-            
-        else:
-            raise TypeError("cannot resolve record index from object of type {!r}".format(
-                type(key).__name__))
-        
-        return index
+    def discard(self, *args, **kwargs):
+        raise TypeError("{} object does not support the discard operation".format(
+            self.__class__.__name__))
     
-    def _resolve_record_indices(self, key):
-        u"""Resolve record indices from the given key."""
-        
-        if isinstance(key, slice):
-            
-            indices = tuple( i for i in
-                xrange( *key.indices( len(self._data) ) ) )
-            
-        elif isinstance(key, Iterable) and not isinstance(key, basestring):
-            
-            indices = tuple( self._resolve_record_index(k) for k in key )
-            
-        elif key is Ellipsis:
-            
-            indices = tuple( i for i in xrange( len(self._data) ) )
-            
-        else:
-            raise TypeError("cannot resolve record indices from object of type {!r}".format(
-                type(key).__name__))
-        
-        return indices
-    
-    def fieldindex(self, fieldname):
-        u"""Get field index corresponding to the specified fieldname."""
-        
-        if not isinstance(fieldname, basestring):
-            raise TypeError("{} fieldname must be of string type, not {!r}".format(
-                self.__class__.__name__, type(fieldname).__name__))
-        
-        try:
-            index = self._field_dict[fieldname]
-        except KeyError:
-            raise KeyError("{} fieldname not found ({!r})".format(
-                self.__class__.__name__, fieldname))
-        
-        return index
-    
-    def to_dict(self):
-        u"""Return FrozenTable as a mutable dict."""
-        return dict( izip(self._field_list, izip(*self._data)) )
-    
-    def to_FrozenRecord(self):
-        return FrozenRecord(data=self._data, fieldnames=self._field_list)
-    
-    def to_list(self, flatten=False):
-        u"""Return FrozenTable as a mutable list."""
-        if flatten:
-            return [ x for row in self._data for x in row ]
-        else:
-            return [ list(x) for x in self._data ]
+    def intersection(self, *args, **kwargs):
+        return FrozenSet( self._data.intersection(*args, **kwargs) )
 
-class FrozenRecord(FrozenTable):
-    u"""Hashable record class.
+    def isdisjoint(self, *args, **kwargs):
+        return self._data.isdisjoint(*args, **kwargs)
     
-    A FrozenRecord is equivalent to a single record of a FrozenTable. Once
-    created, the resulting object cannot be subsequently modified through
-    its public interface.
+    def issubset(self, *args, **kwargs):
+        return self._data.issubset(*args, **kwargs)
+    
+    def issuperset(self, *args, **kwargs):
+        return self._data.issuperset(*args, **kwargs)
+    
+    def pop(self, *args, **kwargs):
+        raise TypeError("{} object does not support the pop operation".format(
+            self.__class__.__name__))
+    
+    def remove(self, *args, **kwargs):
+        raise TypeError("{} object does not support element removal".format(
+            self.__class__.__name__))
+    
+    def symmetric_difference(self, *args, **kwargs):
+        return FrozenSet( self._data.symmetric_difference(*args, **kwargs) )
+    
+    def union(self, *args, **kwargs):
+        return FrozenSet( self._data.union(*args, **kwargs) )
+
+################################################################################
+
+class _FrozenHeadings(FrozenObject, _TableHeadings):
+    u"""Frozen table headings class."""
+
+    @classmethod
+    def _freeze(cls, x):
+        return cls(x)
+    
+    def __init__(self, headings=None, size=None):
+        _TableHeadings.__init__(self, headings=headings, size=size)
+    
+    def __hash__(self):
+        return hash( tuple(self._data) )
+        
+    def _thaw(self, memo=None):
+        return _TableHeadings(self._data)
+
+################################################################################
+
+class FrozenTable(FrozenObject, Table):
+    u"""Frozen table class.
+    
+    A FrozenTable is a sequence of regular rows, which can be indexed by column
+    heading in addition to row and column indices. Once created, the resulting
+    object cannot be modified through its public interface.
     """
     
+    _hdg_type = _FrozenHeadings
+    _seq_type = tuple
+    
     @classmethod
-    def from_dict(cls, data):
-        u"""Get FrozenRecord from dict."""
-        
-        if not isinstance(data, Mapping):
-            raise TypeError("data not of mapping type ~ {!r}".format(data))
-        
-        fieldnames = sorted( data.keys() )
-        
-        for x in data.values():
-            if not isinstance(x, FrozenTable.supported_types):
-                raise TypeError("dict data value is of unknown or non-scalar type {!r}".format(
-                    type(x).__name__))
-        
-        return FrozenRecord(data=[ data[k] for k in fieldnames ],
-            fieldnames=fieldnames)
+    def _freeze(cls, x, memo=set()):
+        if not isinstance(x, Table):
+            raise TypeError("expected object of type {!r}, not {!r}".format(
+                Table.__name__, x.__class__.__name__))
+        return cls(x._data, x.headings)
     
-    def __init__(self, data=(), fieldnames=()):
-        
-        super(FrozenRecord, self).__init__(data, fieldnames)
-        
-        if len(self._data) > 1:
-            raise ValueError("invalid {} data".format(self.__class__.__name__))
+    def __init__(self, *args, **kwargs):
+        Table.__init__(self, *args, **kwargs)
     
-    def __getitem__(self, key):
+    def __hash__(self):
+        return hash( (tuple(self.headings), self._data) )
         
-        # Check if column key is a single index or equivalent fieldname.
-        is_col_index = isinstance(key, (int, basestring))
-        
-        # If a single column index specified, get the specified value..
-        if is_col_index:
-            
-            c = self._resolve_field_index(key)
-            item = self._data[0][c]
-            
-        # ..otherwise get specified FrozenRecord subset as a FrozenRecord object.
+    def _thaw(self, memo=None):
+        return Table(self._data, self.headings)
+
+################################################################################
+
+def freeze(x):
+    u"""Get frozen copy of object."""
+    
+    if isinstance(x, _ImmutableScalarTypes + (FrozenObject, frozenset)):
+        return x
+    
+    if isinstance(x, tuple):
+        try:
+            hash(x)
+        except TypeError:
+            pass
         else:
-            
-            col_indices = self._resolve_field_indices(key)
-            data = [ self._data[0][c] for c in col_indices ]
-            fieldnames = [ self._field_list[c] for c in col_indices ]
-            item = FrozenRecord(data, fieldnames)
-        
-        return item
+            return x
     
-    def __iter__(self):
-        for x in self._data[0]:
-            yield x
+    for mutable, frozen in _FrozenTypePairs:
+        if isinstance(x, mutable):
+            return frozen._freeze(x)
+    else:
+        try:
+            hash(x)
+        except TypeError:
+            raise TypeError("unhashable type: {!r}".format(type(x).__name__))
     
-    def __len__(self):
-        return self._data[0].__len__()
-    
-    def __repr__(self):
-        if len(self._data) == 0:
-            return 'FrozenRecord()'
-        fieldnames = [ repr(fieldname) for fieldname in self._field_list ]
-        fields = [ '{}={}'.format(fieldname, repr(value))
-            for fieldname, value in zip(fieldnames, self._data[0]) ]
-        return 'FrozenRecord({})'.format(', '.join(fields))
-    
-    def __reversed__(self):
-        for x in reversed(self._data[0]):
-            yield x
-    
-    def to_dict(self):
-        u"""Return FrozenRecord as a mutable dict."""
-        return dict( izip(self._field_list, self._data[0]) )
-        
-    def to_FrozenTable(self):
-        return FrozenTable(data=self._data, fieldnames=self._field_list)
-    
-    def to_list(self):
-        u"""Return FrozenRecord as a mutable list."""
-        return list(self._data[0])
+    return x
+
+################################################################################
+
+# Sequence of pairs mapping (possibly abstract)
+# mutable types to their frozen counterpart.
+# NB: always iterate in order (e.g. Mapping before Iterable)
+_FrozenTypePairs = (
+    (DeepDict, FrozenDeepDict),
+    (Mapping, FrozenDict),
+    (Set, FrozenSet),
+    (Table, FrozenTable),
+    (Iterable, FrozenList)
+)
+
+__all__ = ['FrozenDeepDict', 'FrozenDict', 'FrozenList', 'FrozenSet', 'FrozenTable']
 
 ################################################################################

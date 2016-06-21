@@ -1,36 +1,31 @@
 #!/usr/bin/env python -tt
 # -*- coding: utf-8 -*-
-u"""GACTutil CSV utilities.
+u"""GACTutil CSV module.
 
 Unicode CSV classes are taken from the recipe in the Python 2 CSV module docs.
-Available: https://docs.python.org/2/library/csv.html [Accessed: May 2016]
+Available from: https://docs.python.org/2/library/csv.html
 """
 
 from __future__ import absolute_import
 import csv
-import os
+from csv import Error as CSVError
 
 ################################################################################
 
-class csvtext(csv.Dialect):
-    """Python CSV dialect for CSV text data."""
+class loose(csv.Dialect):
     delimiter = ','
     quotechar = '"'
-    doublequote = True
+    doublequote = False
+    escapechar = '\\'
     skipinitialspace = True
-    lineterminator = os.linesep
+    lineterminator = '\n'
     quoting = csv.QUOTE_MINIMAL
-csv.register_dialect('csvtext', csvtext)
 
-class tsvtext(csv.Dialect):
-    """Python CSV dialect for TSV text data."""
-    delimiter = '\t'
-    quotechar = '"'
-    doublequote = True
-    skipinitialspace = True
-    lineterminator = os.linesep
-    quoting = csv.QUOTE_MINIMAL
-csv.register_dialect('tsvtext', tsvtext)
+class loose_linux(loose):
+    pass
+
+class loose_win(loose):
+    lineterminator = '\r\n'
 
 ################################################################################
 
@@ -38,7 +33,7 @@ def utf8_encoder(csv_data):
     """Generator function to encode bytestring as UTF-8.
     
     Based on the utf_8_encoder recipe in the Python 2 CSV module docs.
-    Available: https://docs.python.org/2/library/csv.html [Accessed: May 2016]
+    Available from: https://docs.python.org/2/library/csv.html
     """
     for line in csv_data:
         yield line.encode('utf_8')
@@ -47,10 +42,10 @@ class UTF8Reader(object):
     """A CSV writer that will read rows from a UTF-8 encoded CSV file.
     
     Based on the UnicodeReader recipe in the Python 2 CSV module docs.
-    Available: https://docs.python.org/2/library/csv.html [Accessed: May 2016]
+    Available from: https://docs.python.org/2/library/csv.html
     """
     
-    def __init__(self, csvfile, dialect=csvtext, **kwds):
+    def __init__(self, csvfile, dialect=loose, **kwds):
         self._reader = csv.reader(utf8_encoder(csvfile),
             dialect=dialect, **kwds)
     
@@ -70,7 +65,7 @@ class UTF8Writer(object):
     Available: https://docs.python.org/2/library/csv.html [Accessed: May 2016]
     """
 
-    def __init__(self, csvfile, dialect=csvtext, **kwds):
+    def __init__(self, csvfile, dialect=loose, **kwds):
         self._writer = csv.writer(csvfile, dialect=dialect, **kwds)
 
     def writerow(self, row):
@@ -80,5 +75,10 @@ class UTF8Writer(object):
     def writerows(self, rows):
         for row in rows:
             self.writerow(row)
+
+################################################################################
+
+__all__ = ['CSVError', 'loose', 'loose_linux', 'loose_win',
+    'UTF8Reader', 'UTF8Writer']
 
 ################################################################################
