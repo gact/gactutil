@@ -22,13 +22,13 @@ from gactutil import about
 from gactutil import const
 from gactutil import FrozenDict
 from gactutil import gactfunc
+from gactutil import TextReader
+from gactutil import TextWriter
 from gactutil.chrom import norm_chrom_id
 from gactutil.core import fsdecode
 from gactutil.core import fsencode
 from gactutil.core import temporary_directory
 from gactutil.core.ncbi import check_efetch
-from gactutil.core.io import TextReader
-from gactutil.core.io import TextWriter
 from gactutil.core import tools
 from gactutil.core.uniyaml import unidump
 from gactutil.core.uniyaml import uniload

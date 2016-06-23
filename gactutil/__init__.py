@@ -21,7 +21,7 @@ from gactutil.core.config import *
 from gactutil.core.deep import *
 from gactutil.core.frozen import *
 from gactutil.core.gaction import *
-from gactutil.core.io import *
+from gactutil.core.rw import *
 from gactutil.core.table import *
 
 ################################################################################

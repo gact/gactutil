@@ -38,8 +38,8 @@ from gactutil.core.deep import DeepDict
 from gactutil.core.frozen import FrozenDict
 from gactutil.core.frozen import FrozenList
 from gactutil.core.frozen import FrozenTable
-from gactutil.core.io import TextReader
-from gactutil.core.io import TextWriter
+from gactutil.core.rw import TextReader
+from gactutil.core.rw import TextWriter
 from gactutil.core.unicsv import UTF8Reader
 from gactutil.core.unicsv import UTF8Writer
 from gactutil.core.uniyaml import unidump
