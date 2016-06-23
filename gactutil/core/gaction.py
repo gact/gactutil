@@ -1479,8 +1479,6 @@ class gactfunc(object):
                 raise TypeError("argument type ({!r}) differs from that expected ({!r})".format(
                     type(x).__name__, param_type.__name__))
         
-        _Chaperon._validate_ductile(x)
-        
         return x
         
     @staticmethod
@@ -1490,8 +1488,6 @@ class gactfunc(object):
         if return_type is not None and type(x) != return_type:
             raise TypeError("return value type ({}) differs from that expected ({})".format(
                 type(x).__name__, return_type.__name__))
-        
-        _Chaperon._validate_ductile(x)
         
     def __init__(self, function):
         u"""Init gactfunc wrapper from wrapped function."""
