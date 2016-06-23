@@ -37,8 +37,8 @@ class DeepDict(MutableMapping):
         self._data = dict()
         self.update(*args, **kwargs)
     
-    def __contains__(self, item):
-        return item in self._data
+    def __contains__(self, keys):
+        return self.has_keys(keys)
     
     def __copy__(self):
         return self.__class__( copy.copy(self._data) )
