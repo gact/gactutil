@@ -27,6 +27,7 @@ from gactutil import TextWriter
 from gactutil.chrom import norm_chrom_id
 from gactutil.core import fsdecode
 from gactutil.core import fsencode
+from gactutil.core import remove_existing
 from gactutil.core import temporary_directory
 from gactutil.core.ncbi import check_efetch
 from gactutil.core import tools
@@ -641,7 +642,9 @@ def prep_genome(directory, bwa_index=False, fasta_index=False, seq_dict=False,
         pysam.faidx( fsencode(prepped_ref_path) )
     
     if seq_dict or complete:
+        
         dict_path = u'{}.dict'.format(prepped_ref_root)
+        remove_existing(dict_path)
         dict_arg = u'OUTPUT={}'.format(dict_path)
         ref_arg = u'REFERENCE={}'.format(prepped_ref_path)
         tools.run(u'picard', args=(u'CreateSequenceDictionary', ref_arg, dict_arg))
