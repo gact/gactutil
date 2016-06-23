@@ -13,9 +13,12 @@ def run(tool, args=(), stdin=None, stdout=None, stderr=None, input=None):
     u"""Run external tool."""
     
     try:
-        command = config[u'tools', tool]
+        cmds = config[u'tools', tool]
     except KeyError:
         raise ValueError("unknown tool: {!r}".format(tool))
+    
+    # Ensure commands is a list of words.
+    cmds = [cmds] if isinstance(cmds, basestring) else [ cmd for cmd in cmds ]
     
     if ( not isinstance(args, Iterable) or isinstance(args, basestring) or
         any( not isinstance(arg, basestring) for arg in args ) ):
@@ -25,7 +28,7 @@ def run(tool, args=(), stdin=None, stdout=None, stderr=None, input=None):
         raise TypeError("any tool input must be of string type, not {}".format(
             type(input).__name__))
     
-    argv = [command] + [ arg for arg in args ]
+    argv = cmds + [ arg for arg in args ]
     
     argv = [ fsencode(arg) for arg in argv ]
     
