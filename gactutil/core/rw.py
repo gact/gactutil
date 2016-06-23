@@ -362,7 +362,10 @@ class TextReader(_TextRW):
             return []
         
         # Ensure buffer ends with complete line.
-        self._buffer += next(self._handle)
+        try:
+            self._buffer += next(self._handle)
+        except StopIteration:
+            pass
         
         # Split buffer into lines.
         # NB: buffer is bypassed for remainder of method.
