@@ -411,7 +411,7 @@ class TextWriter(_TextRW):
         super(TextWriter, self).__init__(newline=newline)
         
         if self._newline is None:
-            self._newline = config[u'defaults'][u'newline']
+            self._newline = config[u'default'][u'newline']
         
         filepath = fsdecode(filepath)
         
