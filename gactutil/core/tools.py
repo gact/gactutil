@@ -38,7 +38,7 @@ def run(tool, args=(), stdin=None, stdout=None, stderr=None, input=None):
     except (CalledProcessError, IOError) as e:
         raise e
     except OSError:
-        raise RuntimeError("command not found for {} - set tool command in {!r}".format(
+        raise RuntimeError("command not found for {} - ensure tool is available, then set its command in {!r}".format(
             tool, config.filepath))
     
     return out, err
