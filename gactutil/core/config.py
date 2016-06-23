@@ -16,8 +16,7 @@ import gactutil.core.uniyaml as _uniyaml
 
 ################################################################################
 
-def _validate_standard_newline(x):
-    u""""Validate standard newline, allowing for escaped values."""
+def _postload_standard_newline(x):
     
     if not isinstance(x, basestring):
         raise TypeError("invalid newline type: {!r}".format(type(x).__name__))
@@ -36,6 +35,31 @@ def _validate_standard_newline(x):
     
     return x
 
+def _predump_standard_newline(x):
+    
+    if not isinstance(x, basestring):
+        raise TypeError("invalid newline type: {!r}".format(type(x).__name__))
+    
+    # If not standard newline, check if escaped newline.
+    if x not in _standard_newlines:
+        unescaped = _codecs.decode(x, 'string_escape')
+        if unescaped not in _standard_newlines:
+            raise ValueError("invalid/unsupported newline: {!r}".format(x))
+        x = unescaped
+    
+    # Escape newline before dumping to config file.
+    x = _codecs.encode(x, 'string_escape')
+    
+    return x
+
+def _validate_command(x):
+    u""""Validate command as string or sequence of strings."""
+    if isinstance(x, basestring):
+        return x
+    if isinstance(x, _cxn.Sequence) and all( isinstance(w, basestring) for w in x ):
+        return tuple(x)
+    raise TypeError("command must be a string or sequence of strings: {!r}".format(x))
+
 def _validate_unicode(x):
     if not isinstance(x, unicode):
         raise TypeError("expected object of type unicode, not {!r}".format(
@@ -44,20 +68,22 @@ def _validate_unicode(x):
 
 ################################################################################
 
-_ConfigAtom = _cxn.namedtuple('ConfigAtom', ['default', 'validate'])
+_ConfigAtom = _cxn.namedtuple('ConfigAtom', ['default', 'postload', 'predump'])
 
 class _Config(object):
     u"""Class for package configuration."""
     
     _spec = _FrozenDeepDict({
         
-        u'defaults': {
-            u'newline': _ConfigAtom(_os.linesep, _validate_standard_newline)
+        u'default': {
+            u'newline': _ConfigAtom(_os.linesep.encode('string_escape'),
+                _postload_standard_newline, _predump_standard_newline)
         },
         
         u'tools': {
-            u'bwa': _ConfigAtom(u'bwa', _validate_unicode),
-            u'picard': _ConfigAtom(u'java -jar picard.jar', _validate_unicode)
+            u'bwa': _ConfigAtom(u'bwa', _validate_command, _validate_command),
+            u'picard': _ConfigAtom((u'java', u'-jar', u'picard.jar'),
+                _validate_command, _validate_command)
         }
     })
     
@@ -89,11 +115,8 @@ class _Config(object):
             except (KeyError, TypeError):
                 raise KeyError("invalid config keys: {!r}".format(keys))
             
-            if value == value_spec.default: # no need to validate default value
-                continue
-            
-            try:
-                config_info[keys] = value_spec.validate(value)
+            try: # validate value, even if default
+                config_info[keys] = value_spec.postload(value)
             except (AssertionError, TypeError, ValueError):
                 raise ValueError("cannot set {!r} - invalid value: {!r}".format(
                     keys, value))
@@ -196,9 +219,12 @@ class _Config(object):
         config_spec = self._spec
         
         # Set any config info not already in config file.
-        for keys, value in config_spec.leafitems():
-            if keys not in config_info:
-                config_info[keys] = config_spec[keys].default
+        for keys, value_spec in config_spec.leafitems():
+            try:
+                value = config_info[keys]
+            except KeyError:
+                value = value_spec.default
+            config_info[keys] = config_spec[keys].predump(value)
         config_info = dict( config_info )
         
         # Ensure config directory exists.
