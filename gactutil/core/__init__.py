@@ -290,6 +290,14 @@ def ltrunc(string, length):
             type(length).__name__))
     return string[-length:]
 
+def remove_existing(filepath):
+    u"""Remove file if it exists."""
+    try:
+        os.remove(filepath)
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise e
+
 def reshape(sequence, shape):
     u"""Reshape regular sequence."""
     
