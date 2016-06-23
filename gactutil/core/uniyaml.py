@@ -306,6 +306,9 @@ class UniRepresenter(BaseRepresenter):
         data = unicode(data, 'utf_8')
         return self.represent_scalar(tag, data)
     
+    def represent_tuple(self, data):
+        return self.represent_sequence(u'tag:yaml.org,2002:seq', data)
+    
     # NB: methods defined after this point are identical to those of SafeRepresenter.
     
     def ignore_aliases(self, data):
@@ -394,6 +397,9 @@ UniRepresenter.add_representer(float,
 
 UniRepresenter.add_representer(list,
         UniRepresenter.represent_list)
+
+UniRepresenter.add_representer(tuple,
+        UniRepresenter.represent_tuple)
 
 UniRepresenter.add_representer(dict,
         UniRepresenter.represent_dict)
