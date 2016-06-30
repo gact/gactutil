@@ -87,6 +87,9 @@ class _TextRW(object):
         u"""Close reader/writer."""
         if self._closable:
             self._handle.close()
+    
+    def fileno(self):
+        return self._handle.fileno()
 
 class TextReader(_TextRW):
     u"""Text reader class."""
