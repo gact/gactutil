@@ -22,6 +22,7 @@ from vcf.model import _Record
 from gactutil import const
 from gactutil import FrozenList
 from gactutil import gactfunc
+from gactutil import TextWriter
 from gactutil.core import fsencode
 
 ################################################################################
