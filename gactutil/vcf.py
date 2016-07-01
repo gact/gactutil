@@ -48,7 +48,7 @@ class CallRate(vcf.filters.Base):
     def __call__(self, record):
         """Pass if callrate meets threshold, 'FAIL' otherwise."""
         
-        if not record.call_rate < self.threshold:
+        if record.call_rate < self.threshold:
             return 'FAIL'
         
         return None
