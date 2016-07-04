@@ -429,7 +429,7 @@ def set_vcf_contig_metainfo(infile, outfile, seq_dict=None):
         # while getting list of contig IDs.
         with TextReader(infile) as fin:
             
-            reader = vcf.Reader(fin, encoding='utf_8')
+            reader = vcf.Reader(fin)
             
             with TextWriter(tempfile) as ftmp:
                 
@@ -449,7 +449,7 @@ def set_vcf_contig_metainfo(infile, outfile, seq_dict=None):
         # while setting contig metainfo in header.
         with TextReader(tempfile) as ftmp:
             
-            reader = vcf.Reader(ftmp, encoding='utf_8')
+            reader = vcf.Reader(ftmp)
             
             for k in reader.contigs.keys():
                 del reader.contigs[k]
