@@ -15,14 +15,18 @@ from subprocess import Popen
 import sys
 
 import numpy as np
+from pysam import AlignmentFile
 from pysam import VariantFile
 import vcf
 from vcf.model import _Record
+from vcf.parser import _Contig
 
 from gactutil import const
 from gactutil import FrozenList
 from gactutil import gactfunc
+from gactutil import TextReader
 from gactutil import TextWriter
+from gactutil.core import dropped_tempfile
 from gactutil.core import fsencode
 
 ################################################################################
@@ -385,5 +389,79 @@ def get_vcf_persample_depths(infile):
             persample_depths.append(record_sample_depths)
     
     return FrozenList(persample_depths)
+
+@gactfunc
+def set_vcf_contig_metainfo(infile, outfile, seq_dict=None):
+    u"""Set contig metainfo in VCF file header.
+    
+    Reference sequence information is taken from the specified sequence
+    dictionary SAM file, converted to equivalent VCF metainfo fields
+    (e.g. 'SN:chr01' to 'ID=chr01'), and written to metainfo records
+    in the header of the given VCF file.
+    
+    Args:
+        infile (unicode): Input VCF file.
+        seq_dict (unicode): Sequence dictionary SAM text file.
+        outfile (unicode): Output VCF file.
+    """
+    
+    if seq_dict is None:
+        raise ValueError("no contig metainfo source specified")
+    
+    # Get contig metainfo from sequence dictionary file.
+    contig_metainfo = dict()
+    with AlignmentFile(seq_dict, 'r') as reader:
+        
+        for refseq_record in reader.header['SQ']:
+            
+            try:
+                rid = refseq_record['SN']
+                length = refseq_record['LN']
+            except KeyError:
+                raise KeyError("required 'SQ' field not found in SAM file: {!r}".format(seq_dict))
+            
+            contig_metainfo[rid] = _Contig(rid, length)
+    
+    contig_ids = list()
+    with dropped_tempfile() as tempfile:
+        
+        # First pass: copy to temp file unmodified,
+        # while getting list of contig IDs.
+        with TextReader(infile) as fin:
+            
+            reader = vcf.Reader(fin, encoding='utf_8')
+            
+            with TextWriter(tempfile) as ftmp:
+                
+                writer = vcf.Writer(ftmp, template=reader)
+                
+                for record in reader:
+                    k = record.CHROM
+                    if k not in contig_ids:
+                        contig_ids.append(k)
+                    writer.write_record(record)
+        
+        for k in contig_ids:
+            if k not in contig_metainfo:
+                raise RuntimeError("metainfo not found for contig: {!r}".format(k))
+        
+        # Second pass: copy temp file to output,
+        # while setting contig metainfo in header.
+        with TextReader(tempfile) as ftmp:
+            
+            reader = vcf.Reader(ftmp, encoding='utf_8')
+            
+            for k in reader.contigs.keys():
+                del reader.contigs[k]
+            
+            for k in contig_ids:
+                reader.contigs[k] = contig_metainfo[k]
+            
+            with TextWriter(outfile) as fout:
+                
+                writer = vcf.Writer(fout, template=reader)
+                
+                for record in reader:
+                    writer.write_record(record)
 
 ################################################################################
