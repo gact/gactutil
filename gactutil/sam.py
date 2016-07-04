@@ -31,7 +31,7 @@ const.sequencing_platforms = ('CAPILLARY', 'LS454', 'ILLUMINA', 'SOLID',
 ################################################################################
 
 @gactfunc
-def set_bam_rg(infile, rginfo, outfile):
+def set_bam_read_groups(infile, rginfo, outfile):
     u"""Set read group info of BAM file.
     
     Args:
@@ -126,7 +126,7 @@ def set_bam_rg(infile, rginfo, outfile):
         
         # Update header program info.
         # TODO: generate ID automatically
-        header[u'PG'].append({u'ID': u'gaction_set_bam_rg',
+        header[u'PG'].append({u'ID': u'gaction_set_bam_read_groups',
             u'PN': about[u'name'], u'VN': about[u'version'] })
         
         # Update header read group info.
