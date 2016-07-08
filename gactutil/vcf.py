@@ -249,7 +249,7 @@ def _get_observed_allele_count(record, include_upstream_deletions=False):
             raise ValueError("no genotype found for sample {!r} at position {} of {!r}".format(
                 sample.sample, record.POS, record.CHROM))
         
-        if genotype_string is not None:
+        if called_genotype is not None:
             
             sep = '|' if sample.phased else '/'
             
