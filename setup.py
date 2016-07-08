@@ -10,7 +10,7 @@ from gactutil.core.gaction import _GactfuncInterface
 
 setup_info = {
     'name': 'gactutil',
-    'version': '0.1.0',
+    'version': '0.2.0',
     'description': 'Utilities for everyday yeast genomics',
     'author': 'Thomas Walsh',
     'author_email': 'tw164@le.ac.uk',
