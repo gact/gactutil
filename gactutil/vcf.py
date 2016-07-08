@@ -22,6 +22,7 @@ from vcf.model import _Record
 from vcf.parser import _Contig
 
 from gactutil import const
+from gactutil import FrozenDict
 from gactutil import FrozenList
 from gactutil import gactfunc
 from gactutil import TextReader
@@ -293,6 +294,23 @@ def _get_variant_allele_count(record, include_upstream_deletions=False):
     return len(alleles)
 
 ################################################################################
+
+@gactfunc
+def count_vcf_variants(infile):
+    u"""Get number of variants in VCF file.
+    
+    Args:
+        infile (unicode): Input VCF file.
+    
+    Returns:
+        int: Number of variants in VCF file.
+    """
+    num_variants = 0
+    with TextReader(infile) as fh:
+        reader = vcf.Reader(fh)
+        for record in reader:
+            num_variants += 1
+    return num_variants
 
 @gactfunc
 def filter_vcf_variants(infile, outfile, filters, no_short_circuit=False, 
