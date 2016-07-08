@@ -467,21 +467,23 @@ def rename_vcf_contigs(infile, mapping, outfile):
             
             reader = vcf.Reader(ftmp)
             
-            contig_metainfo = dict()
-            
-            for k in contig_ids:
+            if len(reader.contigs) > 0:
                 
-                try:
-                    contig_record = reader.contigs[k]
-                except KeyError:
-                    raise RuntimeError("metainfo not found for contig: {!r}".format(k))
+                contig_metainfo = dict()
                 
-                contig_metainfo[k] = _Contig(mapping[k], contig_record.length)
-            
-            reader.contigs.clear()
-            
-            for k in contig_ids:
-                reader.contigs[k] = contig_metainfo[k]
+                for k in contig_ids:
+                    
+                    try:
+                        contig_record = reader.contigs[k]
+                    except KeyError:
+                        raise RuntimeError("metainfo not found for contig: {!r}".format(k))
+                    
+                    contig_metainfo[k] = _Contig(mapping[k], contig_record.length)
+                
+                reader.contigs.clear()
+                
+                for k in contig_ids:
+                    reader.contigs[k] = contig_metainfo[k]
             
             with TextWriter(outfile) as fout:
                 
