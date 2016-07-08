@@ -391,6 +391,89 @@ def get_vcf_persample_depths(infile):
     return FrozenList(persample_depths)
 
 @gactfunc
+def rename_vcf_contigs(infile, mapping, outfile):
+    u"""Rename contigs in VCF file.
+    
+    Contigs are renamed in VCF header metainfo
+    and in the 'CHROM' field of each VCF record.
+    
+    Args:
+        infile (unicode): Input VCF file.
+        mapping (FrozenDict): Contig ID mapping.
+        outfile (unicode): Output VCF file.
+    """
+    
+    for item in mapping.items():
+        for x in item:
+            if not isinstance(x, basestring):
+                raise TypeError("contig IDs must be of string type, not {!r}".format(
+                    type(x).__name__))
+    
+    contig_ids = list()
+    with dropped_tempfile() as tempfile:
+        
+        # First pass: copy to temp file unmodified,
+        # while getting list of existing contig IDs.
+        with TextReader(infile) as fin:
+            
+            reader = vcf.Reader(fin)
+            
+            with TextWriter(tempfile) as ftmp:
+                
+                writer = vcf.Writer(ftmp, template=reader)
+                
+                for record in reader:
+                    k = record.CHROM
+                    if k not in contig_ids:
+                        contig_ids.append(k)
+                    writer.write_record(record)
+        
+        # Update contig ID mapping to include only input VCF contigs.
+        mapping = mapping.thaw()
+        for k in mapping.keys():
+            if k not in contig_ids:
+                del mapping[k]
+        for k in contig_ids:
+            if k not in mapping:
+                mapping[k] = k
+        
+        # Check that the updated contig mapping is one-to-one.
+        old_ids = mapping.keys()
+        new_ids = mapping.values()
+        if len(old_ids) != len(set(old_ids)) or len(new_ids) != len(set(new_ids)):
+            raise RuntimeError("contig ID mapping is not one-to-one")
+        
+        # Second pass: copy temp file to output, while
+        # renaming contigs in header metainfo and variant records.
+        with TextReader(tempfile) as ftmp:
+            
+            reader = vcf.Reader(ftmp)
+            
+            contig_metainfo = dict()
+            
+            for k in contig_ids:
+                
+                try:
+                    contig_record = reader.contigs[k]
+                except KeyError:
+                    raise RuntimeError("metainfo not found for contig: {!r}".format(k))
+                
+                contig_metainfo[k] = _Contig(mapping[k], contig_record.length)
+            
+            reader.contigs.clear()
+            
+            for k in contig_ids:
+                reader.contigs[k] = contig_metainfo[k]
+            
+            with TextWriter(outfile) as fout:
+                
+                writer = vcf.Writer(fout, template=reader)
+                
+                for record in reader:
+                    record.CHROM = mapping[ record.CHROM ]
+                    writer.write_record(record)
+
+@gactfunc
 def set_vcf_contig_metainfo(infile, outfile, seq_dict=None):
     u"""Set contig metainfo in VCF file header.
     
