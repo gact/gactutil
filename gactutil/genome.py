@@ -577,6 +577,9 @@ def prep_genome(directory, bwa_index=False, fasta_index=False, seq_dict=False,
             for j, feature in enumerate(record.features):
                 if feature.type in (u'chromosome', u'contig'):
                     feature.id = seq_id
+                    for k in (u'ID', u'Name'):
+                        if k in feature.qualifiers:
+                            feature.qualifiers[k] = seq_id
                     record.features[j] = feature
             
             records[i] = record
