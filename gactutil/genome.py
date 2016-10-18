@@ -14,7 +14,11 @@ import sys
 from textwrap import dedent
 import time
 
-from BCBio import GFF
+try:
+    from bcbio import GFF
+except ImportError:
+    from BCBio import GFF
+
 from Bio import SeqIO
 import pysam
 
