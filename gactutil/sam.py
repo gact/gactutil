@@ -41,7 +41,7 @@ def set_bam_read_groups(infile, rginfo, outfile):
             information.
     """
     
-    known_filter_types = (u'filename', u'qname')
+    known_filter_types = (u'filename', u'query')
     
     if u'ID' not in rginfo.headings:
         raise ValueError("read group 'ID' column not found in read group table")
@@ -89,12 +89,12 @@ def set_bam_read_groups(infile, rginfo, outfile):
                 
                 for record in reader:
                     
-                    qname = record.query_name
+                    query_name = record.query_name
                     
-                    if u'qname' in regexes:
-                        matches = [ regex.search(qname) 
-                            for regex in regexes[u'qname'] ]
-                        matching_indices[u'qname'] = [ i
+                    if u'query' in regexes:
+                        matches = [ regex.search(query_name)
+                            for regex in regexes[u'query'] ]
+                        matching_indices[u'query'] = [ i
                             for i, m in enumerate(matches) 
                             if m is not None ]
                     
@@ -107,9 +107,9 @@ def set_bam_read_groups(infile, rginfo, outfile):
                         if len(common_indices) == 1:
                             i = common_indices.pop()
                         elif len(common_indices) > 1:
-                            raise RuntimeError("read does not match a unique read group: {!r}".format(qname))
+                            raise RuntimeError("read does not match a unique read group: {!r}".format(query_name))
                         elif len(common_indices) == 0:
-                            raise RuntimeError("read does not match any read group: {!r}".format(qname))
+                            raise RuntimeError("read does not match any read group: {!r}".format(query_name))
                     
                     else:
                         
