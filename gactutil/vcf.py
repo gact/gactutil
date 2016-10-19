@@ -307,7 +307,7 @@ def count_vcf_variants(infile):
     """
     num_variants = 0
     with TextReader(infile) as fh:
-        reader = vcf.Reader(fh)
+        reader = vcf.Reader(fh, compressed=False)
         for record in reader:
             num_variants += 1
     return num_variants
@@ -434,7 +434,7 @@ def rename_vcf_contigs(infile, mapping, outfile):
         # while getting list of existing contig IDs.
         with TextReader(infile) as fin:
             
-            reader = vcf.Reader(fin)
+            reader = vcf.Reader(fin, compressed=False)
             
             with TextWriter(tempfile) as ftmp:
                 
@@ -465,7 +465,7 @@ def rename_vcf_contigs(infile, mapping, outfile):
         # renaming contigs in header metainfo and variant records.
         with TextReader(tempfile) as ftmp:
             
-            reader = vcf.Reader(ftmp)
+            reader = vcf.Reader(ftmp, compressed=False)
             
             if len(reader.contigs) > 0:
                 
@@ -532,7 +532,7 @@ def set_vcf_contig_metainfo(infile, outfile, seq_dict=None):
         # while getting list of contig IDs.
         with TextReader(infile) as fin:
             
-            reader = vcf.Reader(fin)
+            reader = vcf.Reader(fin, compressed=False)
             
             with TextWriter(tempfile) as ftmp:
                 
@@ -552,7 +552,7 @@ def set_vcf_contig_metainfo(infile, outfile, seq_dict=None):
         # while setting contig metainfo in header.
         with TextReader(tempfile) as ftmp:
             
-            reader = vcf.Reader(ftmp)
+            reader = vcf.Reader(ftmp, compressed=False)
             
             for k in reader.contigs.keys():
                 del reader.contigs[k]
