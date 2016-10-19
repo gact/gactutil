@@ -82,7 +82,7 @@ class _TextRW(object):
     def __exit__(self, exc_type, exc_value, traceback):
         u"""Close reader/writer on exit from a context block."""
         self.close()
-        
+    
     def close(self):
         u"""Close reader/writer."""
         if self._closable:
@@ -90,6 +90,21 @@ class _TextRW(object):
     
     def fileno(self):
         return self._handle.fileno()
+    
+    def seek(self, *args):
+        if not self._handle.seekable():
+            raise IOError("random access not supported for file: {!r}".format(self._name))
+        return self._handle.seek(*args)
+    
+    def tell(self):
+        if not self._handle.seekable():
+            raise IOError("random access not supported for file: {!r}".format(self._name))
+        return self._handle.tell()
+    
+    def truncate(size=None):
+        if not self._handle.seekable():
+            raise IOError("random access not supported for file: {!r}".format(self._name))
+        return self.handle.truncate(size=size)
 
 class TextReader(_TextRW):
     u"""Text reader class."""
