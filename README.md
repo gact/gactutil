@@ -6,7 +6,7 @@ This package contains utilities for day-to-day tasks in yeast genomics.
 
 In addition to the Python standard library, this package depends on the following:
 
-- [BCBio](https://github.com/chapmanb/bcbb)
+- [BCBio-GFF](https://pypi.python.org/pypi/bcbio-gff)
 - [Biopython](http://biopython.org/)
 - [NumPy](http://www.numpy.org/)
 - [PySAM](https://github.com/pysam-developers/pysam)
