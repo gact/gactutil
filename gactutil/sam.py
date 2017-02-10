@@ -17,12 +17,18 @@ from gactutil.core import dropped_tempfile
 ################################################################################
 
 try: # Get SAM header info from PySAM.
-    const.sam_header_record_tags = pysam.calignmentfile.VALID_HEADERS
-    const.sam_header_record_types = pysam.calignmentfile.VALID_HEADER_TYPES
-    const.sam_header_field_tags = pysam.calignmentfile.VALID_HEADER_ORDER
-    const.sam_header_field_types = pysam.calignmentfile.KNOWN_HEADER_FIELDS
+    const.sam_header_record_tags = pysam.libcalignmentfile.VALID_HEADERS
+    const.sam_header_record_types = pysam.libcalignmentfile.VALID_HEADER_TYPES
+    const.sam_header_field_tags = pysam.libcalignmentfile.VALID_HEADER_ORDER
+    const.sam_header_field_types = pysam.libcalignmentfile.KNOWN_HEADER_FIELDS
 except AttributeError:
-    raise ImportError("cannot import SAM header information")
+    try:
+        const.sam_header_record_tags = pysam.calignmentfile.VALID_HEADERS
+        const.sam_header_record_types = pysam.calignmentfile.VALID_HEADER_TYPES
+        const.sam_header_field_tags = pysam.calignmentfile.VALID_HEADER_ORDER
+        const.sam_header_field_types = pysam.calignmentfile.KNOWN_HEADER_FIELDS
+    except AttributeError:
+        raise ImportError("cannot import SAM header information")
 
 # From the SAM format spec.
 const.sequencing_platforms = ('CAPILLARY', 'LS454', 'ILLUMINA', 'SOLID',
