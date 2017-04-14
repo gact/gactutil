@@ -13,7 +13,7 @@ setup_info = {
     'version': '0.2.0',
     'description': 'Utilities for everyday yeast genomics',
     'author': 'Thomas Walsh',
-    'author_email': 'tw164@le.ac.uk',
+    'author_email': 'tw164@protonmail.com',
     'url': 'https://github.com/gact/gactutil',
     'packages': setuptools.find_packages(),
     'include_package_data': True,

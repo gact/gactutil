@@ -42,4 +42,4 @@ To see options for a command, use the help flag (`-h`).
 
 ## Contact
 
-For information or issues email tw164 (-a-) le.ac.uk
+For information or issues email tw164 [AT] protonmail [DOT] com
