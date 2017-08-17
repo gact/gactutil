@@ -2,7 +2,7 @@
 
 This package contains utilities for day-to-day tasks in yeast genomics.
 
-## Dependencies 
+## Dependencies
 
 In addition to the Python standard library, this package depends on the following:
 
@@ -17,7 +17,7 @@ In particular, the YAML submodule of this package contains slightly modified ver
 
 Also, VCF filters use the [PyVCF filter framework](https://pyvcf.readthedocs.io/en/latest/FILTERS.html), and Unicode CSV data are processed using classes based on the recipe in the [CSV module docs](https://docs.python.org/2/library/csv.html).
 
-## Installation 
+## Installation
 
 To install this package, navigate to the package root directory and input the command:
 
@@ -27,9 +27,9 @@ python setup.py install
 
 This will install GACTutil and any dependencies.
 
-## Usage 
+## Usage
 
-Selected functions can be run from the command line using the package entry 
+Selected functions can be run from the command line using the package entry
 point 'gaction' as follows:
 
 ```
@@ -42,4 +42,4 @@ To see options for a command, use the help flag (`-h`).
 
 ## Contact
 
-For information or issues email tw164 [AT] protonmail [DOT] com
+For information or issues contact [Tom Walsh](http://www.google.com/recaptcha/mailhide/d?k=01_ugVvOIRhVd93lEGyMY9ow==&c=q8ODo2H-hFb8N2RuLQZGmSmyKTrxwtyO7XzNeM53NnQ=).
