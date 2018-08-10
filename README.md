@@ -1,4 +1,4 @@
-# GACTutil: a Python package of yeast genomics utilities.
+# GACTutil: a Python 2 package of yeast genomics utilities.
 
 This package contains utilities for day-to-day tasks in yeast genomics.
 
@@ -42,4 +42,4 @@ To see options for a command, use the help flag (`-h`).
 
 ## Contact
 
-For information or issues contact [Tom Walsh](http://www.google.com/recaptcha/mailhide/d?k=01_ugVvOIRhVd93lEGyMY9ow==&c=q8ODo2H-hFb8N2RuLQZGmSmyKTrxwtyO7XzNeM53NnQ=).
+Please submit any issue on the [GACTutil GitHub repository](https://github.com/gact/gactutil).
